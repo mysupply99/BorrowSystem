@@ -26,7 +26,6 @@
       margin: 0 auto;
     }
     
-    /* 頁面切換控制 */
     .view-section {
       display: none;
     }
@@ -34,7 +33,6 @@
       display: block;
     }
 
-    /* 頂部導航列 */
     .top-bar {
       display: flex;
       justify-content: space-between;
@@ -55,7 +53,6 @@
       cursor: pointer;
     }
 
-    /* 首頁三大按鈕卡片 */
     .home-header {
       text-align: center;
       margin: 40px 0 30px;
@@ -101,7 +98,6 @@
       color: #6b7280;
     }
 
-    /* 掃描區塊與表單共通 */
     .card-panel {
       background: #ffffff;
       border-radius: 12px;
@@ -167,7 +163,6 @@
       color: #6b7280;
     }
 
-    /* 身分選擇器 (Radio Buttons) */
     .role-selection {
       display: flex;
       gap: 20px;
@@ -187,7 +182,6 @@
       cursor: pointer;
     }
 
-    /* 簽名畫布 */
     .sign-box {
       border: 1.5px dashed #9ca3af;
       background: #fff;
@@ -217,7 +211,6 @@
       cursor: pointer;
     }
 
-    /* 歸還時對照原借用紀錄之樣式 */
     .borrow-ref-panel {
       background: #eff6ff;
       border: 1px solid #bfdbfe;
@@ -238,7 +231,6 @@
       color: #1e3a8a;
     }
 
-    /* 底部聲明與按鈕 */
     .notice {
       padding: 12px;
       font-size: 0.82rem;
@@ -264,7 +256,6 @@
       background: #2563eb;
     }
 
-    /* 詳細資料頁面 (Tabs & Table) */
     .tabs {
       display: flex;
       gap: 8px;
@@ -386,7 +377,6 @@
           <input type="text" id="borrowItemId" placeholder="請掃描條碼" readonly>
         </div>
 
-        <!-- 身分選擇 -->
         <div class="form-group">
           <label>借用人身分</label>
           <div class="role-selection">
@@ -413,10 +403,18 @@
           </div>
         </div>
 
-        <!-- 教師專用欄位 (預設隱藏) -->
+        <!-- 教師專用欄位：處室下拉選單 -->
         <div class="form-group" id="groupTeacher" style="display: none;">
-          <label>教師姓名 / 處室</label>
-          <input type="text" id="borrowTeacherName" placeholder="例：王大明老師 (教務處)">
+          <label>處室單位</label>
+          <select id="borrowTeacherDept">
+            <option value="教務處">教務處</option>
+            <option value="學務處">學務處</option>
+            <option value="總務處">總務處</option>
+            <option value="輔導處">輔導處</option>
+            <option value="人事室">人事室</option>
+            <option value="會計室">會計室</option>
+            <option value="其他">其他</option>
+          </select>
         </div>
 
         <div class="form-row">
@@ -441,7 +439,7 @@
             <canvas id="padBorrow"></canvas>
           </div>
           <div class="sign-meta">
-            <span>請借用人於上方框架內書寫姓名</span>
+            <span>請借用人於上方框架內書寫簽名</span>
             <button type="button" class="btn-clear" onclick="padBorrow.clear()">清除重簽</button>
           </div>
         </div>
@@ -472,7 +470,6 @@
           </div>
         </div>
 
-        <!-- 借出原始紀錄比對卡片 -->
         <div class="borrow-ref-panel" id="returnRefPanel" style="display:none;">
           <h4>原借出資訊核對</h4>
           <div class="ref-grid">
@@ -494,7 +491,7 @@
             <canvas id="padReturn"></canvas>
           </div>
           <div class="sign-meta">
-            <span>請歸還人於上方框架內書寫姓名</span>
+            <span>請歸還人於上方框架內書寫簽名</span>
             <button type="button" class="btn-clear" onclick="padReturn.clear()">清除重簽</button>
           </div>
         </div>
@@ -526,7 +523,7 @@
             <tr>
               <th>狀態</th>
               <th>物品編號</th>
-              <th>借用人身分 / 資訊</th>
+              <th>借用人身分 / 單位</th>
               <th>借用時間</th>
               <th>借用簽名</th>
               <th id="thReturnTime" style="display:none;">歸還時間</th>
@@ -564,7 +561,6 @@
       return new SignaturePad(canvas, { backgroundColor: 'rgb(255, 255, 255)' });
     }
 
-    // 身分切換邏輯
     function toggleRoleFields() {
       const role = document.querySelector('input[name="borrowRole"]:checked').value;
       const groupStudent = document.getElementById('groupStudent');
@@ -584,11 +580,11 @@
         records.push({
           id: 'REC-001',
           itemId: 'KEY-LAB-01',
-          role: 'student',
-          studentClass: '資二乙',
-          studentSeat: '08',
-          teacherName: '',
-          borrowerDisplay: '資二乙 08 號',
+          role: 'teacher',
+          studentClass: '',
+          studentSeat: '',
+          teacherDept: '教務處',
+          borrowerDisplay: '教務處',
           qty: 1,
           borrowTime: '2026/09/18 10:30:00',
           purpose: '專題實作',
@@ -696,7 +692,6 @@
       }
     }
 
-    // 提交借用
     function submitBorrow() {
       const itemId = document.getElementById('borrowItemId').value;
       const role = document.querySelector('input[name="borrowRole"]:checked').value;
@@ -706,7 +701,7 @@
       let borrowerDisplay = '';
       let studentClass = '';
       let studentSeat = '';
-      let teacherName = '';
+      let teacherDept = '';
 
       if (!itemId) { alert('請先掃描借出物品 QR Code！'); return; }
 
@@ -719,12 +714,8 @@
         }
         borrowerDisplay = `${studentClass} ${studentSeat} 號`;
       } else {
-        teacherName = document.getElementById('borrowTeacherName').value.trim();
-        if (!teacherName) {
-          alert('請填寫教師姓名或處室！');
-          return;
-        }
-        borrowerDisplay = teacherName;
+        teacherDept = document.getElementById('borrowTeacherDept').value;
+        borrowerDisplay = teacherDept;
       }
 
       if (padBorrow.isEmpty()) { alert('請借用人於畫布手寫簽名！'); return; }
@@ -735,7 +726,7 @@
         role: role,
         studentClass: studentClass,
         studentSeat: studentSeat,
-        teacherName: teacherName,
+        teacherDept: teacherDept,
         borrowerDisplay: borrowerDisplay,
         qty: qty,
         borrowTime: document.getElementById('borrowTime').value,
@@ -751,17 +742,14 @@
       saveRecords();
       alert('【借出登記成功】！');
       
-      // 重置欄位並回首頁
       document.getElementById('borrowItemId').value = '';
       document.getElementById('borrowStudentClass').value = '';
       document.getElementById('borrowStudentSeat').value = '';
-      document.getElementById('borrowTeacherName').value = '';
       document.getElementById('borrowPurpose').value = '';
       padBorrow.clear();
       navigateTo('viewHome');
     }
 
-    // 提交歸還
     function submitReturn() {
       if (!pendingReturnRecord) {
         alert('請先掃描要歸還的物品條碼！');
@@ -846,3 +834,4 @@
   </script>
 </body>
 </html>
+
