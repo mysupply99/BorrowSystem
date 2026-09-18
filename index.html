@@ -673,7 +673,7 @@
       activeScanner = new Html5Qrcode(containerId);
       currentScanningTarget = mode;
       activeScanner.start(
-        { facingMode: "environment" },
+        { facingMode: "user" },
         { fps: 10, qrbox: { width: 140, height: 140 } },
         (decodedText) => {
           handleScanResult(decodedText, mode);
