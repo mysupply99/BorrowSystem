@@ -373,7 +373,7 @@
         </div>
 
         <div class="form-group">
-          <label>借出物品 (Asset ID / 名稱)</label>[span_0](start_span)[span_0](end_span)
+          <label>借出物品 (Asset ID / 名稱)</label>
           <input type="text" id="borrowItemId" placeholder="請掃描條碼" readonly>
         </div>
 
@@ -394,16 +394,16 @@
         <!-- 學生專用欄位 -->
         <div class="form-row" id="groupStudent">
           <div class="form-group">
-            <label>班級</label>[span_1](start_span)[span_1](end_span)
+            <label>班級</label>
             <input type="text" id="borrowStudentClass" placeholder="例：資三甲、高一1班">
           </div>
           <div class="form-group">
-            <label>座號</label>[span_2](start_span)[span_2](end_span)
+            <label>座號</label>
             <input type="number" id="borrowStudentSeat" placeholder="例：08" min="1">
           </div>
         </div>
 
-        <!-- 教師專用欄位：處室下拉選單 -->
+        <!-- 教師專用欄位 -->
         <div class="form-group" id="groupTeacher" style="display: none;">
           <label>處室單位</label>
           <select id="borrowTeacherDept">
@@ -419,22 +419,22 @@
 
         <div class="form-row">
           <div class="form-group">
-            <label>借用日期 / 時間</label>[span_3](start_span)[span_3](end_span)
+            <label>借用日期 / 時間</label>
             <input type="text" id="borrowTime" readonly>
           </div>
           <div class="form-group">
-            <label>數量</label>[span_4](start_span)[span_4](end_span)
+            <label>數量</label>
             <input type="number" id="borrowQty" value="1" min="1">
           </div>
         </div>
 
         <div class="form-group">
-          <label>用途說明</label>[span_5](start_span)[span_5](end_span)
+          <label>用途說明</label>
           <input type="text" id="borrowPurpose" placeholder="例：電腦教室課後維護">
         </div>
 
         <div class="form-group">
-          <label>借用人簽名</label>[span_6](start_span)[span_6](end_span)
+          <label>借用人簽名</label>
           <div class="sign-box">
             <canvas id="padBorrow"></canvas>
           </div>
@@ -445,7 +445,8 @@
         </div>
 
         <div class="notice">
-          ※ 請妥善保管借出物品、設備，如有遺失或損壞需擔負損害賠償責任。[span_7](start_span)[span_7](end_span)
+          ※ 請妥善保管借出物品、設備，如有遺失或損壞需擔負損害賠償責任。<br>
+          ※ 請確實登記借出物品、數量、借出/歸還日期時間、借用人簽名、歸還人簽名及用途說明，用畢後請儘快歸還至本處。
         </div>
 
         <button class="btn-submit btn-blue" onclick="submitBorrow()">確認借出登記</button>
@@ -481,12 +482,12 @@
         </div>
 
         <div class="form-group">
-          <label>歸還日期 / 時間</label>[span_8](start_span)[span_8](end_span)
+          <label>歸還日期 / 時間</label>
           <input type="text" id="returnTime" readonly>
         </div>
 
         <div class="form-group">
-          <label>歸還人簽名</label>[span_9](start_span)[span_9](end_span)
+          <label>歸還人簽名</label>
           <div class="sign-box">
             <canvas id="padReturn"></canvas>
           </div>
@@ -497,7 +498,7 @@
         </div>
 
         <div class="form-group">
-          <label>備註</label>[span_10](start_span)[span_10](end_span)
+          <label>備註</label>
           <textarea id="returnRemark" rows="2" placeholder="設備歸還狀況良好 / 異常狀況填報"></textarea>
         </div>
 
@@ -834,4 +835,3 @@
   </script>
 </body>
 </html>
-
