@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>物品借還登記系統</title>
+  
+  <!-- 引入 QR Code 掃描庫與電子簽名庫 -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-touch-callout: none;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Noto Sans TC", sans-serif;
+      background-color: #f4f6f8;
+      color: #333;
+      padding: 16px;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #1f2937;
+    }
+    
+    /* 頂部掃描與狀態切換區 */
+    .scanner-panel {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+      display: flex;
+      gap: 16px;
+      align-items: center;
+    }
+    #reader {
+      width: 220px;
+      height: 160px;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    .scanner-controls {
+      flex: 1;
+    }
+    .scanner-controls h3 {
+      font-size: 1.1rem;
+      margin-bottom: 6px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+    .badge-available { background: #dcfce7; color: #166534; }
+    .badge-borrowed { background: #fee2e2; color: #991b1b; }
+    .btn-action {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+
+    /* 雙欄主表格容器 */
+    .ledger-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      background: #fff;
+      border: 2px solid #111827;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }
+    .ledger-col {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .ledger-col:first-child {
+      border-right: 3px solid #111827; /* 實體表格中間的明顯隔線 */
+      background: #fafafa;
+    }
+    .col-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      text-align: center;
+      padding-bottom: 8px;
+      border-bottom: 2px solid #374151;
+      letter-spacing: 2px;
+    }
+    
+    /* 表單項目排版 */
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #4b5563;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      background: #fff;
+    }
+    input:disabled, textarea:disabled {
+      background: #e5e7eb;
+      color: #6b7280;
+      cursor: not-allowed;
+    }
+
+    /* 手寫簽名板元件 */
+    .signature-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .signature-box {
+      border: 1.5px dashed #9ca3af;
+      background: #fff;
+      border-radius: 8px;
+      width: 100%;
+      height: 140px;
+      position: relative;
+      touch-action: none; /* 防止 iPad 簽名時觸發畫面滾動 */
+    }
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .signature-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .btn-clear {
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    /* 底部聲明注意事項 */
+    .notice {
+      margin-top: 14px;
+      padding: 12px;
+      font-size: 0.82rem;
+      color: #4b5563;
+      line-height: 1.5;
+      background: #e5e7eb;
+      border-radius: 6px;
+    }
+    .notice p {
+      margin-bottom: 4px;
+    }
+
+    /* 送出操作列 */
+    .submit-bar {
+      margin-top: 16px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+    .btn-submit {
+      background: #16a34a;
+      color: #fff;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: 1.05rem;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .btn-submit:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>物品借還登記系統</h1>
+  </div>
+
+  <!-- QR Code 掃描控制區 -->
+  <div class="scanner-panel">
+    <div id="reader"></div>
+    <div class="scanner-controls">
+      <h3>物品條碼掃描</h3>
+      <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 8px;">
+        將鑰匙圈 QR Code 對準左側鏡頭，或點選按鈕手動啟動鏡頭。
+      </p>
+      <div>
+        狀態：<span id="currentStatusBadge" class="badge badge-available">等待掃描</span>
+      </div>
+      <button class="btn-action" id="btnToggleCam" onclick="toggleCamera()">開啟相機掃描</button>
+      <button class="btn-action" style="background:#4b5563;" onclick="simulateScan('KEY-LAB-01')">模擬掃描 (測試用)</button>
+    </div>
+  </div>
+
+  <!-- 借還雙欄主要表格 -->
+  <div class="ledger-container">
+    
+    <!-- 左側：借用時填寫 -->
+    <div class="ledger-col" id="colBorrow">
+      <div class="col-title">借 用 時 填 寫</div>[span_1](start_span)[span_1](end_span)
+
+      <div class="form-group">
+        <label>借出物品 (Asset ID / 名稱)</label>[span_2](start_span)[span_2](end_span)
+        <input type="text" id="borrowItem" placeholder="掃描條碼自動帶入" readonly>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>班級 / 座號</label>[span_3](start_span)[span_3](end_span)
+          <input type="text" id="borrowerClassSeat" placeholder="例：資三甲 12 號">
+        </div>
+        <div class="form-group">
+          <label>數量</label>[span_4](start_span)[span_4](end_span)
+          <input type="number" id="borrowQty" value="1" min="1">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>借用日期 / 時間</label>[span_5](start_span)[span_5](end_span)
+        <input type="text" id="borrowTime" readonly>
+      </div>
+
+      <div class="form-group">
+        <label>用途說明</label>[span_6](start_span)[span_6](end_span)
+        <input type="text" id="borrowPurpose" placeholder="例：課後專案討論、電腦維護">
+      </div>
+
+      <!-- 借用人簽名畫布 -->
+      <div class="signature-wrapper">
+        <label>借用人簽名</label>[span_7](start_span)[span_7](end_span)
+        <div class="signature-box">
+          <canvas id="padBorrow"></canvas>
+        </div>
+        <div class="signature-actions">
+          <span style="font-size:0.75rem; color:#9ca3af;">請在方框內書寫姓名</span>
+          <button type="button" class="btn-clear" onclick="clearBorrowSign()">清除重簽</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右側：歸還時填寫 -->
+    <div class="ledger-col" id="colReturn">
+      <div class="col-title">歸 還 時 填 寫</div>[span_8](start_span)[span_8](end_span)
+
+      <div class="form-group">
+        <label>歸還日期 / 時間</label>[span_9](start_span)[span_9](end_span)
+        <input type="text" id="returnTime" readonly>
+      </div>
+
+      <!-- 歸還人簽名畫布 -->
+      <div class="signature-wrapper">
+        <label>歸還人簽名</label>[span_10](start_span)[span_10](end_span)
+        <div class="signature-box">
+          <canvas id="padReturn"></canvas>
+        </div>
+        <div class="signature-actions">
+          <span style="font-size:0.75rem; color:#9ca3af;">請在方框內書寫姓名</span>
+          <button type="button" class="btn-clear" onclick="clearReturnSign()">清除重簽</button>
+        </div>
+      </div>
+
+      <div class="form-group" style="margin-top: 8px;">
+        <label>備註</label>[span_11](start_span)[span_11](end_span)
+        <textarea id="returnRemark" rows="3" placeholder="設備歸還狀況良好 / 異常回報"></textarea>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 底部規範聲明 -->
+  <div class="notice">
+    <p>※ 請妥善保管借出物品、設備，如有遺失或損壞需擔負損害賠償責任。[span_12](start_span)[span_12](end_span)</p>
+    <p>※ 請確實登記借出物品、數量、借出/歸還日期時間、借用人簽名、歸還人簽名及用途說明，用畢後請儘快歸還至本處。[span_13](start_span)[span_13](end_span)</p>
+  </div>
+
+  <!-- 動作送出按鈕 -->
+  <div class="submit-bar">
+    <button class="btn-submit" id="btnSubmit" onclick="handleSubmit()">確認登記送出</button>
+  </div>
+
+  <script>
+    let borrowPad, returnPad;
+    let html5QrCode;
+    let isCameraRunning = false;
+
+    // 初始化時間格式
+    function getFormattedTime() {
+      const now = new Date();
+      return now.toLocaleString('zh-TW', { hour12: false });
+    }
+
+    // 初始化簽名板畫布尺寸 (處理高解析度防模糊)
+    function resizeCanvas(canvas, pad) {
+      const ratio = Math.max(window.devicePixelRatio || 1, 1);
+      canvas.width = canvas.offsetWidth * ratio;
+      canvas.height = canvas.offsetHeight * ratio;
+      canvas.getContext("2d").scale(ratio, ratio);
+      pad.clear();
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const canvasBorrow = document.getElementById('padBorrow');
+      const canvasReturn = document.getElementById('padReturn');
+
+      borrowPad = new SignaturePad(canvasBorrow, { backgroundColor: 'rgb(255, 255, 255)' });
+      returnPad = new SignaturePad(canvasReturn, { backgroundColor: 'rgb(255, 255, 255)' });
+
+      // 視窗調整或 iPad 旋轉時重新配置
+      window.addEventListener('resize', () => {
+        resizeCanvas(canvasBorrow, borrowPad);
+        resizeCanvas(canvasReturn, returnPad);
+      });
+      setTimeout(() => {
+        resizeCanvas(canvasBorrow, borrowPad);
+        resizeCanvas(canvasReturn, returnPad);
+      }, 300);
+
+      // 預設鎖定右側歸還欄位
+      setReturnEnabled(false);
+    });
+
+    function clearBorrowSign() { borrowPad.clear(); }
+    function clearReturnSign() { returnPad.clear(); }
+
+    function setReturnEnabled(enabled) {
+      document.getElementById('returnRemark').disabled = !enabled;
+      if (!enabled) {
+        returnPad.off();
+      } else {
+        returnPad.on();
+      }
+    }
+
+    // 處理掃描後的資料分流 (借出 vs 歸還)
+    function onScanSuccess(decodedText) {
+      console.log("掃描結果:", decodedText);
+      // 模擬切換邏輯：若目前沒借，走借用流程；若已填借用，走歸還流程
+      const itemField = document.getElementById('borrowItem');
+      
+      if (!itemField.value) {
+        // 進入【借用模式】
+        itemField.value = decodedText;
+        document.getElementById('borrowTime').value = getFormattedTime();
+        document.getElementById('currentStatusBadge').className = 'badge badge-borrowed';
+        document.getElementById('currentStatusBadge').innerText = '辦理借出中';
+        setReturnEnabled(false);
+      } else {
+        // 再次掃描同一物品，進入【歸還模式】
+        document.getElementById('returnTime').value = getFormattedTime();
+        document.getElementById('currentStatusBadge').innerText = '辦理歸還中';
+        setReturnEnabled(true);
+      }
+    }
+
+    // 模擬測試按鈕
+    function simulateScan(mockCode) {
+      onScanSuccess(mockCode);
+    }
+
+    // 相機啟動與停止控制
+    function toggleCamera() {
+      const btn = document.getElementById('btnToggleCam');
+      if (!html5QrCode) {
+        html5QrCode = new Html5Qrcode("reader");
+      }
+
+      if (!isCameraRunning) {
+        html5QrCode.start(
+          { facingMode: "environment" }, // 使用 iPad 後置鏡頭
+          { fps: 10, qrbox: { width: 150, height: 150 } },
+          (decodedText) => {
+            onScanSuccess(decodedText);
+          },
+          (errorMessage) => { /* 掃描中忽略無 QR code 錯誤 */ }
+        ).then(() => {
+          isCameraRunning = true;
+          btn.innerText = "關閉相機";
+        }).catch(err => alert("相機權限開啟失敗: " + err));
+      } else {
+        html5QrCode.stop().then(() => {
+          isCameraRunning = false;
+          btn.innerText = "開啟相機掃描";
+        });
+      }
+    }
+
+    // 送出登記處理
+    function handleSubmit() {
+      const isBorrowing = !document.getElementById('returnTime').value;
+
+      if (isBorrowing) {
+        if (!document.getElementById('borrowItem').value) {
+          alert('請先掃描借出物品條碼！');
+          return;
+        }
+        if (borrowPad.isEmpty()) {
+          alert('請借用人於左側畫布完成手寫簽名！');
+          return;
+        }
+        const borrowSignatureImage = borrowPad.toDataURL(); // 轉成 Base64 PNG 圖片
+        console.log("借用人簽名圖檔產生完畢，長度：", borrowSignatureImage.length);
+        alert('【借出登記成功】！已鎖定紀錄。');
+      } else {
+        if (returnPad.isEmpty()) {
+          alert('請歸還人於右側畫布完成手寫簽名！');
+          return;
+        }
+        const returnSignatureImage = returnPad.toDataURL();
+        console.log("歸還人簽名圖檔產生完畢，長度：", returnSignatureImage.length);
+        alert('【歸還登記結案成功】！');
+      }
+    }
+  </script>
+</body>
+</html>
