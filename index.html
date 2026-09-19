@@ -677,7 +677,7 @@
     }
 
     async function getItemName(code) {
-      if (supabase) {
+      if (sbClient) {
         try {
           const { data } = await supabase.from('items').select('name').eq('id', code).single();
           if (data && data.name) return data.name;
