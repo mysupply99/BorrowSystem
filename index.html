@@ -160,7 +160,8 @@
     }
     input:read-only, textarea:read-only {
       background: #f3f4f6;
-      color: #6b7280;
+      color: #374151;
+      font-weight: 600;
     }
 
     .role-selection {
@@ -368,13 +369,18 @@
             <p style="font-weight:600;">掃描鑰匙圈 QR Code (前鏡頭)</p>
             <p style="font-size:0.8rem; color:#6b7280; margin-top:2px;">將條碼湊近前鏡頭約 15-20 公分</p>
             <button class="btn-action" id="btnCamBorrow" onclick="toggleCamera('borrow')">開啟前相機</button>
-            <button class="btn-action" style="background:#4b5563;" onclick="mockScanBorrow('KEY-LAB-01')">模擬掃碼 (KEY-LAB-01)</button>
+            <div style="margin-top:6px; display:flex; gap:6px;">
+              <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="mockScanBorrow('K01')">模擬掃碼 [K01 視聽教室]</button>
+              <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="mockScanBorrow('K02')">模擬掃碼 [K02 電腦教室]</button>
+            </div>
           </div>
         </div>
 
         <div class="form-group">
-          <label>借出物品 (Asset ID / 名稱)</label>
-          <input type="text" id="borrowItemId" placeholder="請掃描條碼" readonly>
+          <label>借出物品 (代碼與名稱)</label>
+          <input type="text" id="borrowItemDisplay" placeholder="請掃描條碼" readonly>
+          <input type="hidden" id="borrowItemId">
+          <input type="hidden" id="borrowItemName">
         </div>
 
         <div class="form-group">
@@ -417,7 +423,6 @@
           </select>
         </div>
 
-        <!-- 新增：借用人打字姓名 -->
         <div class="form-group">
           <label>借用人姓名 (文字打字)</label>
           <input type="text" id="borrowerName" placeholder="請輸入借用人姓名">
@@ -436,7 +441,7 @@
 
         <div class="form-group">
           <label>用途說明</label>
-          <input type="text" id="borrowPurpose" placeholder="例：電腦教室課後維護">
+          <input type="text" id="borrowPurpose" placeholder="例：活動彩排、課程教學">
         </div>
 
         <div class="form-group">
@@ -473,22 +478,24 @@
             <p style="font-weight:600;">掃描歸還物品條碼 (前鏡頭)</p>
             <p style="font-size:0.8rem; color:#6b7280; margin-top:2px;">系統將自動載入該物品當初借用紀錄</p>
             <button class="btn-action" id="btnCamReturn" onclick="toggleCamera('return')">開啟前相機</button>
-            <button class="btn-action" style="background:#4b5563;" onclick="mockScanReturn('KEY-LAB-01')">模擬掃碼 (KEY-LAB-01)</button>
+            <div style="margin-top:6px; display:flex; gap:6px;">
+              <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="mockScanReturn('K01')">模擬歸還 [K01]</button>
+            </div>
           </div>
         </div>
 
+        <!-- 原借出資訊核對卡片 -->
         <div class="borrow-ref-panel" id="returnRefPanel" style="display:none;">
           <h4>原借出資訊核對</h4>
           <div class="ref-grid">
-            <div><strong>物品：</strong><span id="refItem">-</span></div>
+            <div><strong>物品名稱：</strong><span id="refItem">-</span></div>
             <div><strong>借出時間：</strong><span id="refTime">-</span></div>
-            <div><strong>借用人：</strong><span id="refBorrower">-</span></div>
+            <div><strong>借用身分：</strong><span id="refBorrower">-</span></div>
             <div><strong>姓名：</strong><span id="refBorrowerName">-</span></div>
             <div><strong>數量 / 用途：</strong><span id="refPurpose">-</span></div>
           </div>
         </div>
 
-        <!-- 新增：歸還人打字姓名 -->
         <div class="form-group">
           <label>歸還人姓名 (文字打字)</label>
           <input type="text" id="returnerName" placeholder="請輸入歸還人姓名">
@@ -536,12 +543,12 @@
           <thead>
             <tr>
               <th>狀態</th>
-              <th>物品編號</th>
+              <th>物品代碼與名稱</th>
               <th>借用單位 / 身分</th>
-              <th>借用人姓名</th>
+              <th>借用人</th>
               <th>借用時間</th>
               <th>借用簽名</th>
-              <th id="thReturnerName" style="display:none;">歸還人姓名</th>
+              <th id="thReturnerName" style="display:none;">歸還人</th>
               <th id="thReturnTime" style="display:none;">歸還時間</th>
               <th id="thReturnSign" style="display:none;">歸還簽名</th>
               <th id="thRemark" style="display:none;">備註</th>
@@ -556,8 +563,27 @@
   </div>
 
   <script>
-    let records = JSON.parse(localStorage.getItem('borrow_records') || '[]');
+    // ==========================================
+    // 物品名冊對照表 (代碼 -> 中文名稱)
+    // 隨時可以在此擴充新增物品
+    // ==========================================
+    const itemCatalog = {
+      "K01": "視聽教室鑰匙",
+      "K02": "電腦教室(一)鑰匙",
+      "K03": "電腦教室(二)鑰匙",
+      "K04": "活動中心大門鑰匙",
+      "K05": "會議室鑰匙",
+      "K06": "體育器材室鑰匙",
+      "K07": "創客教室鑰匙",
+      "DEV-01": "無線麥克風組",
+      "DEV-02": "單槍投影機"
+    };
 
+    function getItemName(code) {
+      return itemCatalog[code] || "未登記物品 (" + code + ")";
+    }
+
+    let records = JSON.parse(localStorage.getItem('borrow_records') || '[]');
     let padBorrow, padReturn;
     let activeScanner = null;
     let currentScanningTarget = null;
@@ -592,10 +618,12 @@
     }
 
     window.addEventListener('DOMContentLoaded', () => {
+      // 預設一筆測試借出資料 (K01 視聽教室)
       if (records.length === 0) {
         records.push({
           id: 'REC-001',
-          itemId: 'KEY-LAB-01',
+          itemId: 'K01',
+          itemName: '視聽教室鑰匙',
           role: 'teacher',
           studentClass: '',
           studentSeat: '',
@@ -648,23 +676,29 @@
       }
     }
 
+    // 掃碼辨識處理 (帶出中文名稱)
     function handleScanResult(decodedText, mode) {
+      const code = decodedText.trim();
+      const name = getItemName(code);
+
       if (mode === 'borrow') {
-        const existing = records.find(r => r.itemId === decodedText && r.status === 'borrowed');
+        const existing = records.find(r => r.itemId === code && r.status === 'borrowed');
         if (existing) {
-          alert(`物品 [${decodedText}] 已經在借出中（借用人：${existing.borrowerDisplay} ${existing.borrowerName}），尚未歸還！`);
+          alert(`物品 [${code}] ${name} 已經在借出中！\n借用人：${existing.borrowerDisplay} ${existing.borrowerName}\n尚未歸還，無法重複借出。`);
           return;
         }
-        document.getElementById('borrowItemId').value = decodedText;
+        document.getElementById('borrowItemId').value = code;
+        document.getElementById('borrowItemName').value = name;
+        document.getElementById('borrowItemDisplay').value = `[${code}] ${name}`;
         document.getElementById('borrowTime').value = getNow();
       } else if (mode === 'return') {
-        const record = records.find(r => r.itemId === decodedText && r.status === 'borrowed');
+        const record = records.find(r => r.itemId === code && r.status === 'borrowed');
         if (!record) {
-          alert(`查無此物品 [${decodedText}] 的借出紀錄，或該物品早已歸還完畢。`);
+          alert(`查無物品 [${code}] ${name} 的借出紀錄，或該物品早已歸還完畢。`);
           return;
         }
         pendingReturnRecord = record;
-        document.getElementById('refItem').innerText = record.itemId;
+        document.getElementById('refItem').innerText = `[${record.itemId}] ${record.itemName}`;
         document.getElementById('refTime').innerText = record.borrowTime;
         document.getElementById('refBorrower').innerText = `${record.role === 'teacher' ? '[教師] ' : '[學生] '}${record.borrowerDisplay}`;
         document.getElementById('refBorrowerName').innerText = record.borrowerName;
@@ -691,7 +725,6 @@
       activeScanner = new Html5Qrcode(containerId);
       currentScanningTarget = mode;
       
-      // 使用前鏡頭 (user)
       activeScanner.start(
         { facingMode: "user" },
         { fps: 10, qrbox: { width: 140, height: 140 } },
@@ -715,6 +748,7 @@
 
     function submitBorrow() {
       const itemId = document.getElementById('borrowItemId').value;
+      const itemName = document.getElementById('borrowItemName').value;
       const role = document.querySelector('input[name="borrowRole"]:checked').value;
       const borrowerName = document.getElementById('borrowerName').value.trim();
       const qty = document.getElementById('borrowQty').value;
@@ -750,6 +784,7 @@
       const newRecord = {
         id: 'REC-' + Date.now(),
         itemId: itemId,
+        itemName: itemName,
         role: role,
         studentClass: studentClass,
         studentSeat: studentSeat,
@@ -769,9 +804,11 @@
 
       records.unshift(newRecord);
       saveRecords();
-      alert('【借出登記成功】！');
+      alert(`【借出登記成功】！\n物品：${itemName}`);
       
       document.getElementById('borrowItemId').value = '';
+      document.getElementById('borrowItemName').value = '';
+      document.getElementById('borrowItemDisplay').value = '';
       document.getElementById('borrowStudentClass').value = '';
       document.getElementById('borrowStudentSeat').value = '';
       document.getElementById('borrowerName').value = '';
@@ -804,7 +841,7 @@
       pendingReturnRecord.status = 'returned';
 
       saveRecords();
-      alert('【物品歸還結案成功】！');
+      alert(`【物品歸還結案成功】！\n物品：${pendingReturnRecord.itemName}`);
 
       pendingReturnRecord = null;
       document.getElementById('returnRefPanel').style.display = 'none';
@@ -853,7 +890,7 @@
 
         let html = `
           <td>${badge}</td>
-          <td style="font-weight:600;">${r.itemId}</td>
+          <td style="font-weight:600;">[${r.itemId}] ${r.itemName || getItemName(r.itemId)}</td>
           <td>${roleBadge}${r.borrowerDisplay}</td>
           <td>${r.borrowerName || '-'}</td>
           <td>${r.borrowTime}</td>
