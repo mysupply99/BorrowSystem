@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>物品借還管理系統</title>
   
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <style>
     * {
       box-sizing: border-box;
@@ -27,7 +31,7 @@
       display: none;
     }
     .view-section.active {
-      display: block !important;
+      display: block;
     }
 
     .top-bar {
@@ -50,7 +54,7 @@
       cursor: pointer;
     }
 
-    .cloud-status {
+    .status-pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -66,8 +70,8 @@
       height: 8px;
       border-radius: 50%;
     }
-    .dot-online { background: #16a34a; }
-    .dot-offline { background: #dc2626; }
+    .dot-green { background: #16a34a; }
+    .dot-red { background: #dc2626; }
 
     .home-header {
       text-align: center;
@@ -343,25 +347,6 @@
     .badge-teacher { background: #fef3c7; color: #92400e; }
     .badge-student { background: #e0e7ff; color: #3730a3; }
   </style>
-
-  <!-- 獨立的頁面切換腳本：確保不被任何外部函式庫干擾 -->
-  <script>
-    function navigateTo(viewId) {
-      const sections = document.getElementsByClassName('view-section');
-      for (let i = 0; i < sections.length; i++) {
-        sections[i].classList.remove('active');
-      }
-      const target = document.getElementById(viewId);
-      if (target) {
-        target.classList.add('active');
-      }
-      
-      // 觸發對應頁面的初始化
-      if (window.onPageNavigated) {
-        window.onPageNavigated(viewId);
-      }
-    }
-  </script>
 </head>
 <body>
 
@@ -370,11 +355,10 @@
     <!-- 1. 入口首頁 -->
     <section id="viewHome" class="view-section active">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span class="cloud-status" id="cloudStatusBadge">
-          <span class="dot dot-offline" id="cloudDot"></span>
-          <span id="cloudStatusText">本地模式</span>
+        <span class="status-pill" id="cloudStatusBadge">
+          <span class="dot dot-red" id="cloudDot"></span>
+          <span id="cloudStatusText">連線檢測中...</span>
         </span>
-        <button class="btn-action" style="padding:4px 10px; font-size:0.75rem; background:#4b5563;" onclick="syncOfflineQueue()">同步雲端</button>
       </div>
 
       <div class="home-header">
@@ -385,11 +369,11 @@
       <div class="menu-grid">
         <div class="menu-card btn-borrow" onclick="navigateTo('viewBorrow')">
           <h3 style="color: #2563eb;">借用登記</h3>
-          <p>掃描條碼・身分登記・簽名</p>
+          <p>掃描條碼・身分登記・手寫簽名</p>
         </div>
         <div class="menu-card btn-return" onclick="navigateTo('viewReturn')">
           <h3 style="color: #16a34a;">歸還登記</h3>
-          <p>掃描條碼・核對資訊結案</p>
+          <p>掃描條碼・核對手寫簽名結案</p>
         </div>
         <div class="menu-card btn-details" onclick="navigateTo('viewDetails')">
           <h3 style="color: #374151;">詳細資料</h3>
@@ -409,9 +393,9 @@
         <div class="scanner-row">
           <div id="readerBorrow" class="scan-viewfinder"></div>
           <div class="scan-desc">
-            <p style="font-weight:600;">掃描鑰匙圈 QR Code (前鏡頭)</p>
-            <p style="font-size:0.8rem; color:#6b7280; margin-top:2px;">將條碼湊近前鏡頭約 15-20 公分</p>
-            <button class="btn-action" id="btnCamBorrow" onclick="toggleCamera('borrow')">開啟前相機</button>
+            <p style="font-weight:600;">掃描鑰匙圈 QR Code</p>
+            <p style="font-size:0.8rem; color:#6b7280; margin-top:2px;">對準鏡頭或點擊按鈕</p>
+            <button class="btn-action" id="btnCamBorrow" onclick="toggleCamera('borrow')">開啟相機</button>
             <div style="margin-top:6px; display:flex; gap:6px;">
               <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="mockScanBorrow('K01')">模擬掃碼 [K01]</button>
               <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="mockScanBorrow('K02')">模擬掃碼 [K02]</button>
@@ -440,6 +424,7 @@
           </div>
         </div>
 
+        <!-- 學生專用欄位 -->
         <div class="form-row" id="groupStudent">
           <div class="form-group">
             <label>班級</label>
@@ -451,6 +436,7 @@
           </div>
         </div>
 
+        <!-- 教師專用欄位：處室下拉選單 -->
         <div class="form-group" id="groupTeacher" style="display: none;">
           <label>處室單位</label>
           <select id="borrowTeacherDept">
@@ -462,11 +448,6 @@
             <option value="會計室">會計室</option>
             <option value="其他">其他</option>
           </select>
-        </div>
-
-        <div class="form-group">
-          <label>借用人姓名 (文字打字)</label>
-          <input type="text" id="borrowerName" placeholder="請輸入借用人姓名">
         </div>
 
         <div class="form-row">
@@ -482,23 +463,24 @@
 
         <div class="form-group">
           <label>用途說明</label>
-          <input type="text" id="borrowPurpose" placeholder="例：活動彩排、課程教學">
+          <input type="text" id="borrowPurpose" placeholder="例：課後實作、教室清潔">
         </div>
 
+        <!-- 借用人手寫姓名簽名區 -->
         <div class="form-group">
-          <label>借用人簽名</label>
+          <label>借用人手寫姓名 (簽名)</label>
           <div class="sign-box">
             <canvas id="padBorrow"></canvas>
           </div>
           <div class="sign-meta">
-            <span>請借用人於上方框架內書寫簽名</span>
+            <span>請借用人於上方框架內手寫簽名</span>
             <button type="button" class="btn-clear" onclick="if(padBorrow) padBorrow.clear()">清除重簽</button>
           </div>
         </div>
 
         <div class="notice">
           ※ 請妥善保管借出物品、設備，如有遺失或損壞需擔負損害賠償責任。<br>
-          ※ 請確實登記借出物品、數量、借出/歸還日期時間、借用人簽名、歸還人簽名及用途說明，用畢後請儘快歸還至本處。
+          ※ 請確實登記借出物品、數量、借出/歸還日期時間、借用人手寫簽名、歸還人手寫簽名及用途說明，用畢後請儘快歸還至本處。
         </div>
 
         <button class="btn-submit btn-blue" onclick="submitBorrow()">確認借出登記</button>
@@ -516,9 +498,9 @@
         <div class="scanner-row">
           <div id="readerReturn" class="scan-viewfinder"></div>
           <div class="scan-desc">
-            <p style="font-weight:600;">掃描歸還物品條碼 (前鏡頭)</p>
+            <p style="font-weight:600;">掃描歸還物品條碼</p>
             <p style="font-size:0.8rem; color:#6b7280; margin-top:2px;">系統將自動載入該物品當初借用紀錄</p>
-            <button class="btn-action" id="btnCamReturn" onclick="toggleCamera('return')">開啟前相機</button>
+            <button class="btn-action" id="btnCamReturn" onclick="toggleCamera('return')">開啟相機</button>
             <div style="margin-top:6px; display:flex; gap:6px;">
               <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="mockScanReturn('K01')">模擬歸還 [K01]</button>
             </div>
@@ -530,15 +512,9 @@
           <div class="ref-grid">
             <div><strong>物品名稱：</strong><span id="refItem">-</span></div>
             <div><strong>借出時間：</strong><span id="refTime">-</span></div>
-            <div><strong>借用身分：</strong><span id="refBorrower">-</span></div>
-            <div><strong>姓名：</strong><span id="refBorrowerName">-</span></div>
+            <div><strong>借用人身分：</strong><span id="refBorrower">-</span></div>
             <div><strong>數量 / 用途：</strong><span id="refPurpose">-</span></div>
           </div>
-        </div>
-
-        <div class="form-group">
-          <label>歸還人姓名 (文字打字)</label>
-          <input type="text" id="returnerName" placeholder="請輸入歸還人姓名">
         </div>
 
         <div class="form-group">
@@ -546,13 +522,14 @@
           <input type="text" id="returnTime" readonly>
         </div>
 
+        <!-- 歸還人手寫姓名簽名區 -->
         <div class="form-group">
-          <label>歸還人簽名</label>
+          <label>歸還人手寫姓名 (簽名)</label>
           <div class="sign-box">
             <canvas id="padReturn"></canvas>
           </div>
           <div class="sign-meta">
-            <span>請歸還人於上方框架內書寫簽名</span>
+            <span>請歸還人於上方框架內手寫簽名</span>
             <button type="button" class="btn-clear" onclick="if(padReturn) padReturn.clear()">清除重簽</button>
           </div>
         </div>
@@ -585,12 +562,10 @@
               <th>狀態</th>
               <th>物品代碼與名稱</th>
               <th>借用單位 / 身分</th>
-              <th>借用人</th>
               <th>借用時間</th>
-              <th>借用簽名</th>
-              <th id="thReturnerName" style="display:none;">歸還人</th>
+              <th>借用手寫簽名</th>
               <th id="thReturnTime" style="display:none;">歸還時間</th>
-              <th id="thReturnSign" style="display:none;">歸還簽名</th>
+              <th id="thReturnSign" style="display:none;">歸還手寫簽名</th>
               <th id="thRemark" style="display:none;">備註</th>
             </tr>
           </thead>
@@ -602,29 +577,19 @@
 
   </div>
 
-  <!-- 外部套件改為在 body 底部載入，避免阻塞頁面 -->
-  <script src="https://unpkg.com/html5-qrcode"></script>
-  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
   <script>
     // ==============================================================
-    // 填入你的 Supabase 連線資訊
+    // 請填入你的 Supabase 連線資訊
     // ==============================================================
-    const SUPABASE_URL = "https://qdiwyzkjgxvuinulpvsg.supabase.co/rest/v1/";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkaXd5emtqZ3h2dWludWxwdnNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4Mjg4ODQsImV4cCI6MjEwNTQwNDg4NH0.U_IUlKcz-6Qgr_AmEf-EyVTabdfs5oMEQXujBiRDfVg";
-    
+    const SUPABASE_URL = "https://你的專案ID.supabase.co";
+    const SUPABASE_ANON_KEY = "你的anon_public金鑰";
+
     let supabase = null;
-    function initSupabase() {
-      try {
-        if (window.supabase && SUPABASE_URL.indexOf("你的專案ID") === -1) {
-          supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-          updateConnectionStatus(true);
-        }
-      } catch (e) {
-        console.warn("Supabase 暫不可用，切換為離線模式");
-      }
-    }
+    let records = JSON.parse(localStorage.getItem('borrow_records') || '[]');
+    let padBorrow = null, padReturn = null;
+    let activeScanner = null;
+    let pendingReturnRecord = null;
+    let currentDetailTab = 'unreturned';
 
     const fallbackCatalog = {
       "K01": "視聽教室鑰匙",
@@ -633,12 +598,6 @@
       "K04": "活動中心大門鑰匙",
       "K05": "會議室鑰匙"
     };
-
-    let records = JSON.parse(localStorage.getItem('borrow_records') || '[]');
-    let padBorrow = null, padReturn = null;
-    let activeScanner = null;
-    let pendingReturnRecord = null;
-    let currentDetailTab = 'unreturned';
 
     function getNow() {
       return new Date().toLocaleString('zh-TW', { hour12: false });
@@ -671,112 +630,67 @@
       }
     }
 
-    function getItemName(code) {
-      const cached = JSON.parse(localStorage.getItem('cached_items') || '{}');
-      if (cached[code]) return cached[code];
-      if (fallbackCatalog[code]) return fallbackCatalog[code];
-      return "未登記物品 (" + code + ")";
-    }
-
-    async function syncItemCatalog() {
-      if (!supabase || !navigator.onLine) return;
-      try {
-        const { data, error } = await supabase.from('items').select('id, name');
-        if (!error && data) {
-          const catalog = {};
-          data.forEach(item => { catalog[item.id] = item.name; });
-          localStorage.setItem('cached_items', JSON.stringify(catalog));
-        }
-      } catch (err) {}
-    }
-
-    async function fetchRecords() {
-      if (supabase && navigator.onLine) {
-        try {
-          const { data, error } = await supabase
-            .from('borrow_records')
-            .select('*')
-            .order('id', { ascending: false });
-          if (!error && data) {
-            records = data.map(r => ({
-              id: r.id,
-              itemId: r.item_id,
-              itemName: r.item_name,
-              role: r.role,
-              studentClass: r.student_class,
-              studentSeat: r.student_seat,
-              teacherDept: r.teacher_dept,
-              borrowerDisplay: r.borrower_display,
-              borrowerName: r.borrower_name,
-              qty: r.qty,
-              borrowTime: r.borrow_time,
-              purpose: r.purpose,
-              borrowSign: r.borrow_sign,
-              returnerName: r.returner_name,
-              returnTime: r.return_time,
-              returnSign: r.return_sign,
-              remark: r.remark,
-              status: r.status
-            }));
-            localStorage.setItem('borrow_records', JSON.stringify(records));
-            updateConnectionStatus(true);
-            updateCounts();
-            return;
-          }
-        } catch (err) {}
-      }
-      updateConnectionStatus(false);
-      updateCounts();
-    }
-
-    function updateConnectionStatus(isOnline) {
+    async function initSupabase() {
       const dot = document.getElementById('cloudDot');
       const text = document.getElementById('cloudStatusText');
-      if (!dot || !text) return;
 
-      if (isOnline && navigator.onLine && supabase) {
-        dot.className = 'dot dot-online';
-        text.innerText = '雲端資料庫已連線';
-      } else {
-        dot.className = 'dot dot-offline';
-        text.innerText = '本地離線模式';
-      }
-    }
-
-    async function syncOfflineQueue() {
-      if (!supabase || !navigator.onLine) {
-        alert("目前處於離線狀態或未設定金鑰。");
-        return;
-      }
-      const queue = JSON.parse(localStorage.getItem('offline_queue') || '[]');
-      if (queue.length === 0) {
-        alert("本機與雲端目前已完全一致。");
-        await fetchRecords();
-        return;
-      }
-
-      let successCount = 0;
-      for (const item of queue) {
-        try {
-          if (item.action === 'insert') {
-            const { error } = await supabase.from('borrow_records').insert([item.payload]);
-            if (!error) successCount++;
-          } else if (item.action === 'update') {
-            const { error } = await supabase.from('borrow_records').update(item.payload).eq('id', item.recordId);
-            if (!error) successCount++;
+      try {
+        if (window.supabase && SUPABASE_URL.indexOf("你的專案ID") === -1) {
+          supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+          const { error } = await supabase.from('borrow_records').select('id').limit(1);
+          if (!error) {
+            dot.className = 'dot dot-green';
+            text.innerText = '雲端資料庫已連線';
+            return;
           }
-        } catch(e) {}
+        }
+      } catch (e) {
+        console.warn("Supabase 連線失敗:", e);
       }
-
-      localStorage.removeItem('offline_queue');
-      alert(`已成功補送 ${successCount} 筆離線紀錄至雲端！`);
-      await fetchRecords();
+      dot.className = 'dot dot-red';
+      text.innerText = '本地離線模式';
     }
 
-    function saveOfflineAction(action, payload, recordId = null) {
-      const queue = JSON.parse(localStorage.getItem('offline_queue') || '[]');
-      queue.push({ action, payload, recordId });
-      localStorage.setItem('offline_queue', JSON.stringify(queue));
+    async function getItemName(code) {
+      if (supabase) {
+        try {
+          const { data } = await supabase.from('items').select('name').eq('id', code).single();
+          if (data && data.name) return data.name;
+        } catch (e) {}
+      }
+      return fallbackCatalog[code] || `物品 (${code})`;
+    }
+
+    async function fetchCloudRecords() {
+      if (!supabase) return;
+      try {
+        const { data, error } = await supabase
+          .from('borrow_records')
+          .select('*')
+          .order('id', { ascending: false });
+        if (!error && data) {
+          records = data.map(r => ({
+            id: r.id,
+            itemId: r.item_id,
+            itemName: r.item_name,
+            role: r.role,
+            studentClass: r.student_class,
+            studentSeat: r.student_seat,
+            teacherDept: r.teacher_dept,
+            borrowerDisplay: r.borrower_display,
+            qty: r.qty,
+            borrowTime: r.borrow_time,
+            purpose: r.purpose,
+            borrowSign: r.borrow_sign,
+            returnTime: r.return_time,
+            returnSign: r.return_sign,
+            remark: r.remark,
+            status: r.status
+          }));
+          localStorage.setItem('borrow_records', JSON.stringify(records));
+          updateCounts();
+        }
+      } catch (err) {}
     }
 
     function updateCounts() {
@@ -788,35 +702,33 @@
       if (elRe) elRe.innerText = returned;
     }
 
-    // 頁面跳轉回呼函式
-    window.onPageNavigated = function(viewId) {
+    function navigateTo(viewId) {
       stopCamera();
+      document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+      document.getElementById(viewId).classList.add('active');
+
       if (viewId === 'viewBorrow') {
         document.getElementById('borrowTime').value = getNow();
         toggleRoleFields();
-        setTimeout(() => { 
-          try { padBorrow = initPad('padBorrow'); } catch(e){} 
-        }, 200);
+        setTimeout(() => { padBorrow = initPad('padBorrow'); }, 200);
       }
       if (viewId === 'viewReturn') {
         document.getElementById('returnTime').value = getNow();
-        setTimeout(() => { 
-          try { padReturn = initPad('padReturn'); } catch(e){} 
-        }, 200);
+        setTimeout(() => { padReturn = initPad('padReturn'); }, 200);
       }
       if (viewId === 'viewDetails') {
         renderTable();
       }
-    };
+    }
 
-    function handleScanResult(decodedText, mode) {
+    async function handleScanResult(decodedText, mode) {
       const code = decodedText.trim();
-      const name = getItemName(code);
+      const name = await getItemName(code);
 
       if (mode === 'borrow') {
         const existing = records.find(r => r.itemId === code && r.status === 'borrowed');
         if (existing) {
-          alert(`物品 [${code}] ${name} 已經在借出中！\n借用人：${existing.borrowerDisplay} ${existing.borrowerName}\n尚未歸還，無法重複借出。`);
+          alert(`物品 [${code}] ${name} 已經在借出中！\n借用人：${existing.borrowerDisplay}\n尚未歸還，無法重複借出。`);
           return;
         }
         document.getElementById('borrowItemId').value = code;
@@ -833,7 +745,6 @@
         document.getElementById('refItem').innerText = `[${record.itemId}] ${record.itemName}`;
         document.getElementById('refTime').innerText = record.borrowTime;
         document.getElementById('refBorrower').innerText = `${record.role === 'teacher' ? '[教師] ' : '[學生] '}${record.borrowerDisplay}`;
-        document.getElementById('refBorrowerName').innerText = record.borrowerName;
         document.getElementById('refPurpose').innerText = `${record.qty} 件 / ${record.purpose}`;
         document.getElementById('returnRefPanel').style.display = 'block';
         document.getElementById('returnTime').value = getNow();
@@ -845,7 +756,7 @@
 
     function toggleCamera(mode) {
       if (!window.Html5Qrcode) {
-        alert("相機模組仍在載入中，請稍候再試。");
+        alert("相機模組載入中，請稍候重試。");
         return;
       }
       const containerId = mode === 'borrow' ? 'readerBorrow' : 'readerReturn';
@@ -854,18 +765,18 @@
 
       if (activeScanner) {
         stopCamera();
-        btn.innerText = "開啟前相機";
+        btn.innerText = "開啟相機";
         return;
       }
 
       activeScanner = new Html5Qrcode(containerId);
       activeScanner.start(
-        { facingMode: "user" },
+        { facingMode: "environment" },
         { fps: 10, qrbox: { width: 140, height: 140 } },
         (decodedText) => {
           handleScanResult(decodedText, mode);
           stopCamera();
-          btn.innerText = "開啟前相機";
+          btn.innerText = "開啟相機";
         },
         () => {}
       ).then(() => {
@@ -884,7 +795,6 @@
       const itemId = document.getElementById('borrowItemId').value;
       const itemName = document.getElementById('borrowItemName').value;
       const role = document.querySelector('input[name="borrowRole"]:checked').value;
-      const borrowerName = document.getElementById('borrowerName').value.trim();
       const qty = parseInt(document.getElementById('borrowQty').value, 10) || 1;
       const purpose = document.getElementById('borrowPurpose').value.trim();
 
@@ -899,7 +809,7 @@
         studentClass = document.getElementById('borrowStudentClass').value.trim();
         studentSeat = document.getElementById('borrowStudentSeat').value.trim();
         if (!studentClass || !studentSeat) {
-          alert('學生借用請確實填寫「班級」與「座號」！');
+          alert('學生借用請填寫「班級」與「座號」！');
           return;
         }
         borrowerDisplay = `${studentClass} ${studentSeat} 號`;
@@ -908,13 +818,8 @@
         borrowerDisplay = teacherDept;
       }
 
-      if (!borrowerName) {
-        alert('請輸入借用人姓名！');
-        return;
-      }
-
       if (!padBorrow || padBorrow.isEmpty()) {
-        alert('請借用人於畫布手寫簽名！');
+        alert('請借用人於畫布手寫姓名簽名！');
         return;
       }
 
@@ -929,7 +834,6 @@
         student_seat: studentSeat,
         teacher_dept: teacherDept,
         borrower_display: borrowerDisplay,
-        borrower_name: borrowerName,
         qty: qty,
         borrow_time: borrowTimeVal,
         purpose: purpose,
@@ -939,19 +843,13 @@
 
       let insertedId = Date.now();
 
-      if (supabase && navigator.onLine) {
+      if (supabase) {
         try {
           const { data, error } = await supabase.from('borrow_records').insert([dbPayload]).select();
           if (!error && data && data.length > 0) {
             insertedId = data[0].id;
-          } else {
-            saveOfflineAction('insert', dbPayload);
           }
-        } catch (err) {
-          saveOfflineAction('insert', dbPayload);
-        }
-      } else {
-        saveOfflineAction('insert', dbPayload);
+        } catch (err) {}
       }
 
       records.unshift({
@@ -963,12 +861,10 @@
         studentSeat: studentSeat,
         teacherDept: teacherDept,
         borrowerDisplay: borrowerDisplay,
-        borrowerName: borrowerName,
         qty: qty,
         borrowTime: borrowTimeVal,
         purpose: purpose,
         borrowSign: borrowSignData,
-        returnerName: '',
         returnTime: '',
         returnSign: '',
         remark: '',
@@ -984,7 +880,6 @@
       document.getElementById('borrowItemDisplay').value = '';
       document.getElementById('borrowStudentClass').value = '';
       document.getElementById('borrowStudentSeat').value = '';
-      document.getElementById('borrowerName').value = '';
       document.getElementById('borrowPurpose').value = '';
       if (padBorrow) padBorrow.clear();
       navigateTo('viewHome');
@@ -995,15 +890,9 @@
         alert('請先掃描要歸還的物品條碼！');
         return;
       }
-      
-      const returnerName = document.getElementById('returnerName').value.trim();
-      if (!returnerName) {
-        alert('請輸入歸還人姓名！');
-        return;
-      }
 
       if (!padReturn || padReturn.isEmpty()) {
-        alert('請歸還人於畫布手寫簽名！');
+        alert('請歸還人於畫布手寫姓名簽名！');
         return;
       }
 
@@ -1012,27 +901,18 @@
       const remarkVal = document.getElementById('returnRemark').value.trim();
 
       const updatePayload = {
-        returner_name: returnerName,
         return_time: returnTimeVal,
         return_sign: returnSignData,
         remark: remarkVal,
         status: 'returned'
       };
 
-      if (supabase && navigator.onLine) {
+      if (supabase) {
         try {
-          const { error } = await supabase.from('borrow_records').update(updatePayload).eq('id', pendingReturnRecord.id);
-          if (error) {
-            saveOfflineAction('update', updatePayload, pendingReturnRecord.id);
-          }
-        } catch (err) {
-          saveOfflineAction('update', updatePayload, pendingReturnRecord.id);
-        }
-      } else {
-        saveOfflineAction('update', updatePayload, pendingReturnRecord.id);
+          await supabase.from('borrow_records').update(updatePayload).eq('id', pendingReturnRecord.id);
+        } catch (err) {}
       }
 
-      pendingReturnRecord.returnerName = returnerName;
       pendingReturnRecord.returnTime = returnTimeVal;
       pendingReturnRecord.returnSign = returnSignData;
       pendingReturnRecord.remark = remarkVal;
@@ -1044,7 +924,6 @@
 
       pendingReturnRecord = null;
       document.getElementById('returnRefPanel').style.display = 'none';
-      document.getElementById('returnerName').value = '';
       document.getElementById('returnRemark').value = '';
       if (padReturn) padReturn.clear();
       navigateTo('viewHome');
@@ -1061,7 +940,6 @@
       const tbody = document.getElementById('recordTableBody');
       const isReturnedTab = currentDetailTab === 'returned';
 
-      document.getElementById('thReturnerName').style.display = isReturnedTab ? '' : 'none';
       document.getElementById('thReturnTime').style.display = isReturnedTab ? '' : 'none';
       document.getElementById('thReturnSign').style.display = isReturnedTab ? '' : 'none';
       document.getElementById('thRemark').style.display = isReturnedTab ? '' : 'none';
@@ -1070,7 +948,7 @@
       tbody.innerHTML = '';
 
       if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center; color:#9ca3af; padding:24px;">目前沒有任何項目</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:#9ca3af; padding:24px;">目前沒有任何項目</td></tr>`;
         return;
       }
 
@@ -1089,16 +967,14 @@
 
         let html = `
           <td>${badge}</td>
-          <td style="font-weight:600;">[${r.itemId}] ${r.itemName || getItemName(r.itemId)}</td>
+          <td style="font-weight:600;">[${r.itemId}] ${r.itemName || r.itemId}</td>
           <td>${roleBadge}${r.borrowerDisplay}</td>
-          <td>${r.borrowerName || '-'}</td>
           <td>${r.borrowTime}</td>
           <td>${signBorrowImg}</td>
         `;
 
         if (isReturnedTab) {
           html += `
-            <td>${r.returnerName || '-'}</td>
             <td>${r.returnTime}</td>
             <td>${signReturnImg}</td>
             <td>${r.remark || '-'}</td>
@@ -1110,18 +986,10 @@
       });
     }
 
-    // 啟動流程
     window.addEventListener('DOMContentLoaded', async () => {
       updateCounts();
-      initSupabase();
-      await syncItemCatalog();
-      await fetchRecords();
-
-      window.addEventListener('online', () => {
-        updateConnectionStatus(true);
-        syncOfflineQueue();
-      });
-      window.addEventListener('offline', () => updateConnectionStatus(false));
+      await initSupabase();
+      await fetchCloudRecords();
     });
   </script>
 </body>
