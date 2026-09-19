@@ -5,10 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>物品借還管理系統</title>
   
-  <script src="https://unpkg.com/html5-qrcode"></script>
-  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
   <style>
     * {
       box-sizing: border-box;
@@ -31,7 +27,7 @@
       display: none;
     }
     .view-section.active {
-      display: block;
+      display: block !important;
     }
 
     .top-bar {
@@ -347,6 +343,25 @@
     .badge-teacher { background: #fef3c7; color: #92400e; }
     .badge-student { background: #e0e7ff; color: #3730a3; }
   </style>
+
+  <!-- 獨立的頁面切換腳本：確保不被任何外部函式庫干擾 -->
+  <script>
+    function navigateTo(viewId) {
+      const sections = document.getElementsByClassName('view-section');
+      for (let i = 0; i < sections.length; i++) {
+        sections[i].classList.remove('active');
+      }
+      const target = document.getElementById(viewId);
+      if (target) {
+        target.classList.add('active');
+      }
+      
+      // 觸發對應頁面的初始化
+      if (window.onPageNavigated) {
+        window.onPageNavigated(viewId);
+      }
+    }
+  </script>
 </head>
 <body>
 
@@ -356,10 +371,10 @@
     <section id="viewHome" class="view-section active">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <span class="cloud-status" id="cloudStatusBadge">
-          <span class="dot dot-online" id="cloudDot"></span>
-          <span id="cloudStatusText">檢查連線狀態中...</span>
+          <span class="dot dot-offline" id="cloudDot"></span>
+          <span id="cloudStatusText">本地模式</span>
         </span>
-        <button class="btn-action" style="padding:4px 10px; font-size:0.75rem; background:#4b5563;" onclick="syncOfflineQueue()">同步離線紀錄</button>
+        <button class="btn-action" style="padding:4px 10px; font-size:0.75rem; background:#4b5563;" onclick="syncOfflineQueue()">同步雲端</button>
       </div>
 
       <div class="home-header">
@@ -587,25 +602,28 @@
 
   </div>
 
-  <script>
-    // 錯誤攔截器：若 JS 有任何出錯，直接在螢幕上警示，不默默卡死
-    window.onerror = function(msg, url, line) {
-      alert("系統發生錯誤 (Line " + line + "): " + msg);
-    };
+  <!-- 外部套件改為在 body 底部載入，避免阻塞頁面 -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+  <script>
     // ==============================================================
-    // 請確認這兩行金鑰字串是否完整 (前後引號不可遺漏)
+    // 填入你的 Supabase 連線資訊
     // ==============================================================
-    const SUPABASE_URL = "https://qdiwyzkjgxvuinulpvsg.supabase.co/";
-    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkaXd5emtqZ3h2dWludWxwdnNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4Mjg4ODQsImV4cCI6MjEwNTQwNDg4NH0.U_IUlKcz-6Qgr_AmEf-EyVTabdfs5oMEQXujBiRDfVg";
+    const SUPABASE_URL = "https://你的專案ID.supabase.co";
+    const SUPABASE_ANON_KEY = "你的anon_public金鑰";
     
     let supabase = null;
-    try {
-      if (window.supabase && SUPABASE_URL.indexOf("你的專案ID") === -1) {
-        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    function initSupabase() {
+      try {
+        if (window.supabase && SUPABASE_URL.indexOf("你的專案ID") === -1) {
+          supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+          updateConnectionStatus(true);
+        }
+      } catch (e) {
+        console.warn("Supabase 暫不可用，切換為離線模式");
       }
-    } catch (e) {
-      console.error("Supabase Client 初始化異常:", e);
     }
 
     const fallbackCatalog = {
@@ -628,7 +646,7 @@
 
     function initPad(canvasId) {
       const canvas = document.getElementById(canvasId);
-      if (!canvas) return null;
+      if (!canvas || !window.SignaturePad) return null;
       const ratio = Math.max(window.devicePixelRatio || 1, 1);
       canvas.width = canvas.offsetWidth * ratio;
       canvas.height = canvas.offsetHeight * ratio;
@@ -669,9 +687,7 @@
           data.forEach(item => { catalog[item.id] = item.name; });
           localStorage.setItem('cached_items', JSON.stringify(catalog));
         }
-      } catch (err) {
-        console.warn("名冊快取更新失敗，使用本地備援");
-      }
+      } catch (err) {}
     }
 
     async function fetchRecords() {
@@ -707,9 +723,7 @@
             updateCounts();
             return;
           }
-        } catch (err) {
-          console.warn("無法取得雲端紀錄，切換本地模式");
-        }
+        } catch (err) {}
       }
       updateConnectionStatus(false);
       updateCounts();
@@ -720,23 +734,23 @@
       const text = document.getElementById('cloudStatusText');
       if (!dot || !text) return;
 
-      if (isOnline && navigator.onLine) {
+      if (isOnline && navigator.onLine && supabase) {
         dot.className = 'dot dot-online';
-        text.innerText = '雲端資料庫連線中';
+        text.innerText = '雲端資料庫已連線';
       } else {
         dot.className = 'dot dot-offline';
-        text.innerText = '離線暫存模式中';
+        text.innerText = '本地離線模式';
       }
     }
 
     async function syncOfflineQueue() {
       if (!supabase || !navigator.onLine) {
-        alert("目前處於離線狀態，無法同步。");
+        alert("目前處於離線狀態或未設定金鑰。");
         return;
       }
       const queue = JSON.parse(localStorage.getItem('offline_queue') || '[]');
       if (queue.length === 0) {
-        alert("本機無待同步紀錄。");
+        alert("本機與雲端目前已完全一致。");
         await fetchRecords();
         return;
       }
@@ -774,30 +788,26 @@
       if (elRe) elRe.innerText = returned;
     }
 
-    // 頁面切換控制 (最核心：確保 100% 執行)
-    function navigateTo(viewId) {
+    // 頁面跳轉回呼函式
+    window.onPageNavigated = function(viewId) {
       stopCamera();
-      document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
-      const target = document.getElementById(viewId);
-      if (target) target.classList.add('active');
-
       if (viewId === 'viewBorrow') {
         document.getElementById('borrowTime').value = getNow();
         toggleRoleFields();
         setTimeout(() => { 
           try { padBorrow = initPad('padBorrow'); } catch(e){} 
-        }, 150);
+        }, 200);
       }
       if (viewId === 'viewReturn') {
         document.getElementById('returnTime').value = getNow();
         setTimeout(() => { 
           try { padReturn = initPad('padReturn'); } catch(e){} 
-        }, 150);
+        }, 200);
       }
       if (viewId === 'viewDetails') {
         renderTable();
       }
-    }
+    };
 
     function handleScanResult(decodedText, mode) {
       const code = decodedText.trim();
@@ -834,6 +844,10 @@
     function mockScanReturn(code) { handleScanResult(code, 'return'); }
 
     function toggleCamera(mode) {
+      if (!window.Html5Qrcode) {
+        alert("相機模組仍在載入中，請稍候再試。");
+        return;
+      }
       const containerId = mode === 'borrow' ? 'readerBorrow' : 'readerReturn';
       const btnId = mode === 'borrow' ? 'btnCamBorrow' : 'btnCamReturn';
       const btn = document.getElementById(btnId);
@@ -1096,9 +1110,10 @@
       });
     }
 
-    // 網頁進入點
+    // 啟動流程
     window.addEventListener('DOMContentLoaded', async () => {
       updateCounts();
+      initSupabase();
       await syncItemCatalog();
       await fetchRecords();
 
