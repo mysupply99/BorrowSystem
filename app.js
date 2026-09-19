@@ -1,7 +1,7 @@
 // ==============================================================
 // 1. 請填入你的 Supabase 連線資訊
 // ==============================================================
-const SUPABASE_URL = "https://qdiwyzkjgxvuinulpvsg.supabase.co/rest/v1/";
+const SUPABASE_URL = "https://qdiwyzkjgxvuinulpvsg.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkaXd5emtqZ3h2dWludWxwdnNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4Mjg4ODQsImV4cCI6MjEwNTQwNDg4NH0.U_IUlKcz-6Qgr_AmEf-EyVTabdfs5oMEQXujBiRDfVg";
 
 // 全域捕獲 JS 未預期報錯，避免無聲掛起
