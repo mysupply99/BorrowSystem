@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>物品借還管理系統</title>
   
+  <!-- 引入開源相機掃描、手寫簽名、Supabase SDK -->
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -394,7 +395,7 @@
           <div id="readerBorrow" class="scan-viewfinder"></div>
           <div class="scan-desc">
             <p style="font-weight:600;">掃描鑰匙圈 QR Code</p>
-            <p style="font-size:0.8rem; color:#6b7280; margin-top:2px;">對準鏡頭或點擊按鈕</p>
+            <p style="font-size:0.8rem; color:#6b7280; margin-top:2px;">對準鏡頭或點擊模擬按鈕</p>
             <button class="btn-action" id="btnCamBorrow" onclick="toggleCamera('borrow')">開啟相機</button>
             <div style="margin-top:6px; display:flex; gap:6px;">
               <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="mockScanBorrow('K01')">模擬掃碼 [K01]</button>
@@ -404,7 +405,7 @@
         </div>
 
         <div class="form-group">
-          <label>借出物品 (代碼與名稱)</label>
+          <label>借出物品 (代碼與名稱)</label>[span_1](start_span)[span_1](end_span)
           <input type="text" id="borrowItemDisplay" placeholder="請掃描條碼" readonly>
           <input type="hidden" id="borrowItemId">
           <input type="hidden" id="borrowItemName">
@@ -427,11 +428,11 @@
         <!-- 學生專用欄位 -->
         <div class="form-row" id="groupStudent">
           <div class="form-group">
-            <label>班級</label>
+            <label>班級</label>[span_2](start_span)[span_2](end_span)
             <input type="text" id="borrowStudentClass" placeholder="例：資三甲、高一1班">
           </div>
           <div class="form-group">
-            <label>座號</label>
+            <label>座號</label>[span_3](start_span)[span_3](end_span)
             <input type="number" id="borrowStudentSeat" placeholder="例：08" min="1">
           </div>
         </div>
@@ -452,35 +453,35 @@
 
         <div class="form-row">
           <div class="form-group">
-            <label>借用日期 / 時間</label>
+            <label>借用日期 / 時間</label>[span_4](start_span)[span_4](end_span)
             <input type="text" id="borrowTime" readonly>
           </div>
           <div class="form-group">
-            <label>數量</label>
+            <label>數量</label>[span_5](start_span)[span_5](end_span)
             <input type="number" id="borrowQty" value="1" min="1">
           </div>
         </div>
 
         <div class="form-group">
-          <label>用途說明</label>
+          <label>用途說明</label>[span_6](start_span)[span_6](end_span)
           <input type="text" id="borrowPurpose" placeholder="例：課後實作、教室清潔">
         </div>
 
         <!-- 借用人手寫姓名簽名區 -->
         <div class="form-group">
-          <label>借用人手寫姓名 (簽名)</label>
+          <label>借用人手寫姓名 (簽名)</label>[span_7](start_span)[span_7](end_span)
           <div class="sign-box">
             <canvas id="padBorrow"></canvas>
           </div>
           <div class="sign-meta">
-            <span>請借用人於上方框架內手寫簽名</span>
+            <span>請借用人於上方框架內手寫姓名簽名</span>
             <button type="button" class="btn-clear" onclick="if(padBorrow) padBorrow.clear()">清除重簽</button>
           </div>
         </div>
 
         <div class="notice">
-          ※ 請妥善保管借出物品、設備，如有遺失或損壞需擔負損害賠償責任。<br>
-          ※ 請確實登記借出物品、數量、借出/歸還日期時間、借用人手寫簽名、歸還人手寫簽名及用途說明，用畢後請儘快歸還至本處。
+          ※ 請妥善保管借出物品、設備，如有遺失或損壞需擔負損害賠償責任。[span_8](start_span)[span_8](end_span)<br>
+          ※ 請確實登記借出物品、數量、借出/歸還日期時間、借用人手寫簽名、歸還人手寫簽名及用途說明，用畢後請儘快歸還至本處。[span_9](start_span)[span_9](end_span)
         </div>
 
         <button class="btn-submit btn-blue" onclick="submitBorrow()">確認借出登記</button>
@@ -518,24 +519,24 @@
         </div>
 
         <div class="form-group">
-          <label>歸還日期 / 時間</label>
+          <label>歸還日期 / 時間</label>[span_10](start_span)[span_10](end_span)
           <input type="text" id="returnTime" readonly>
         </div>
 
         <!-- 歸還人手寫姓名簽名區 -->
         <div class="form-group">
-          <label>歸還人手寫姓名 (簽名)</label>
+          <label>歸還人手寫姓名 (簽名)</label>[span_11](start_span)[span_11](end_span)
           <div class="sign-box">
             <canvas id="padReturn"></canvas>
           </div>
           <div class="sign-meta">
-            <span>請歸還人於上方框架內手寫簽名</span>
+            <span>請歸還人於上方框架內手寫姓名簽名</span>
             <button type="button" class="btn-clear" onclick="if(padReturn) padReturn.clear()">清除重簽</button>
           </div>
         </div>
 
         <div class="form-group">
-          <label>備註</label>
+          <label>備註</label>[span_12](start_span)[span_12](end_span)
           <textarea id="returnRemark" rows="2" placeholder="設備歸還狀況良好 / 異常狀況填報"></textarea>
         </div>
 
@@ -630,25 +631,49 @@
       }
     }
 
+    // 連線初始化：具備 4 秒超時偵錯機制
     async function initSupabase() {
       const dot = document.getElementById('cloudDot');
       const text = document.getElementById('cloudStatusText');
 
-      try {
-        if (window.supabase && SUPABASE_URL.indexOf("你的專案ID") === -1) {
-          supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-          const { error } = await supabase.from('borrow_records').select('id').limit(1);
-          if (!error) {
-            dot.className = 'dot dot-green';
-            text.innerText = '雲端資料庫已連線';
-            return;
-          }
-        }
-      } catch (e) {
-        console.warn("Supabase 連線失敗:", e);
+      if (!SUPABASE_URL || SUPABASE_URL.indexOf("你的專案ID") !== -1) {
+        dot.className = 'dot dot-red';
+        text.innerText = '本地離線模式 (未填金鑰)';
+        return;
       }
-      dot.className = 'dot dot-red';
-      text.innerText = '本地離線模式';
+
+      if (!window.supabase || !window.supabase.createClient) {
+        dot.className = 'dot dot-red';
+        text.innerText = '本地離線模式 (SDK未載入)';
+        return;
+      }
+
+      try {
+        const cleanUrl = SUPABASE_URL.trim().replace(/\/$/, "");
+        const cleanKey = SUPABASE_ANON_KEY.trim();
+        supabase = window.supabase.createClient(cleanUrl, cleanKey);
+
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("連線逾時")), 4000)
+        );
+
+        const fetchPromise = supabase.from('borrow_records').select('id').limit(1);
+
+        const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+        if (error) {
+          console.warn("Supabase 回傳錯誤:", error);
+          dot.className = 'dot dot-red';
+          text.innerText = '本地模式 (資料表名/權限異常)';
+        } else {
+          dot.className = 'dot dot-green';
+          text.innerText = '雲端資料庫已連線';
+        }
+      } catch (err) {
+        console.warn("連線檢測異常:", err);
+        dot.className = 'dot dot-red';
+        text.innerText = '本地離線模式 (連線超時)';
+      }
     }
 
     async function getItemName(code) {
@@ -728,7 +753,7 @@
       if (mode === 'borrow') {
         const existing = records.find(r => r.itemId === code && r.status === 'borrowed');
         if (existing) {
-          alert(`物品 [${code}] ${name} 已經在借出中！\n借用人：${existing.borrowerDisplay}\n尚未歸還，無法重複借出。`);
+          alert(`物品 [${code}] ${name} 已經借出中！\n借用人：${existing.borrowerDisplay}\n尚未歸還，無法重複借出。`);
           return;
         }
         document.getElementById('borrowItemId').value = code;
@@ -738,7 +763,7 @@
       } else if (mode === 'return') {
         const record = records.find(r => r.itemId === code && r.status === 'borrowed');
         if (!record) {
-          alert(`查無物品 [${code}] ${name} 的借出紀錄，或該物品早已歸還完畢。`);
+          alert(`查無物品 [${code}] ${name} 的借出中紀錄。`);
           return;
         }
         pendingReturnRecord = record;
