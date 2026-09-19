@@ -7,8 +7,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 
 
-
-// 全域錯誤攔截器：避免任何未預期的語法或執行期錯誤導致畫面無反應
+// 全域錯誤攔截器
 window.addEventListener('error', function(event) {
   console.error("全域腳本錯誤:", event);
   const dot = document.getElementById('cloudDot');
@@ -19,15 +18,14 @@ window.addEventListener('error', function(event) {
   }
 });
 
-// 全域變數定義
-let supabase = null;
+// 全域變數定義 (變數改名為 sbClient，避免與 window.supabase 衝突)
+let sbClient = null;
 let records = JSON.parse(localStorage.getItem('borrow_records') || '[]');
 let padBorrow = null, padReturn = null;
 let activeScanner = null;
 let pendingReturnRecord = null;
 let currentDetailTab = 'unreturned';
 
-// 離線預設備用名冊（當網路未連線時使用）
 const fallbackCatalog = {
   "K01": "視聽教室鑰匙",
   "K02": "電腦教室(一)鑰匙",
@@ -36,12 +34,10 @@ const fallbackCatalog = {
   "K05": "會議室鑰匙"
 };
 
-// 格式化當前時間字串
 function getNow() {
   return new Date().toLocaleString('zh-TW', { hour12: false });
 }
 
-// 簽名畫布初始化與 iPad 高解析度縮放適配
 function initPad(canvasId) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || !window.SignaturePad) return null;
@@ -53,7 +49,6 @@ function initPad(canvasId) {
   return new SignaturePad(canvas, { backgroundColor: 'rgb(255, 255, 255)' });
 }
 
-// 切換學生與教師欄位顯示
 function toggleRoleFields() {
   const checkedRadio = document.querySelector('input[name="borrowRole"]:checked');
   if (!checkedRadio) return;
@@ -70,7 +65,6 @@ function toggleRoleFields() {
   }
 }
 
-// 連線檢測：具備步驟進度顯示與 4 秒強制超時機制
 async function initSupabase() {
   const dot = document.getElementById('cloudDot');
   const text = document.getElementById('cloudStatusText');
@@ -81,38 +75,31 @@ async function initSupabase() {
     console.log('[Supabase 連線狀態]', msg);
   };
 
-  update('步驟 1: 檢查金鑰設定...');
-
   if (!SUPABASE_URL || SUPABASE_URL.includes("你的專案ID")) {
     update('本地離線模式 (未填 SUPABASE_URL)');
     return;
   }
 
-  update('步驟 2: 檢查 SDK 套件...');
   if (!window.supabase || typeof window.supabase.createClient !== 'function') {
     update('套件載入失敗 (CDN連線受阻)');
     return;
   }
 
-  update('步驟 3: 初始化 Client...');
-  let client;
   try {
     const cleanUrl = SUPABASE_URL.trim().replace(/\/+$/, '');
     const cleanKey = SUPABASE_ANON_KEY.trim();
-    client = window.supabase.createClient(cleanUrl, cleanKey);
-    supabase = client;
+    sbClient = window.supabase.createClient(cleanUrl, cleanKey);
   } catch (e) {
     update('初始化失敗: ' + e.message);
     return;
   }
 
-  update('步驟 4: 測試連線中...');
   try {
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error('網路超時 (4秒無回應)')), 4000)
     );
 
-    const testQuery = client.from('borrow_records').select('id').limit(1);
+    const testQuery = sbClient.from('borrow_records').select('id').limit(1);
     const { data, error } = await Promise.race([testQuery, timeoutPromise]);
 
     if (error) {
@@ -125,22 +112,20 @@ async function initSupabase() {
   }
 }
 
-// 取得物品名稱（優先自雲端抓取，斷網時取用備用名冊）
 async function getItemName(code) {
-  if (supabase) {
+  if (sbClient) {
     try {
-      const { data } = await supabase.from('items').select('name').eq('id', code).single();
+      const { data } = await sbClient.from('items').select('name').eq('id', code).single();
       if (data && data.name) return data.name;
     } catch (e) {}
   }
   return fallbackCatalog[code] || `物品 (${code})`;
 }
 
-// 自雲端同步借還歷程清單
 async function fetchCloudRecords() {
-  if (!supabase) return;
+  if (!sbClient) return;
   try {
-    const { data, error } = await supabase
+    const { data, error } = await sbClient
       .from('borrow_records')
       .select('*')
       .order('id', { ascending: false });
@@ -173,7 +158,6 @@ async function fetchCloudRecords() {
   }
 }
 
-// 更新計數統計數字
 function updateCounts() {
   const unreturned = records.filter(r => r.status === 'borrowed').length;
   const returned = records.filter(r => r.status === 'returned').length;
@@ -183,7 +167,6 @@ function updateCounts() {
   if (elRe) elRe.innerText = returned;
 }
 
-// 頁面導覽切換
 function navigateTo(viewId) {
   stopCamera();
   document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
@@ -204,7 +187,6 @@ function navigateTo(viewId) {
   }
 }
 
-// 處理 QR Code 掃描結果與狀態防呆
 async function handleScanResult(decodedText, mode) {
   const code = decodedText.trim();
   const name = await getItemName(code);
@@ -235,11 +217,9 @@ async function handleScanResult(decodedText, mode) {
   }
 }
 
-// 模擬掃碼輔助測試
 function mockScanBorrow(code) { handleScanResult(code, 'borrow'); }
 function mockScanReturn(code) { handleScanResult(code, 'return'); }
 
-// 相機模組控制
 function toggleCamera(mode) {
   if (!window.Html5Qrcode) {
     alert("相機模組載入中，請稍候再試。");
@@ -279,7 +259,6 @@ function stopCamera() {
   }
 }
 
-// 借用登記送出
 async function submitBorrow() {
   const itemId = document.getElementById('borrowItemId').value;
   const itemName = document.getElementById('borrowItemName').value;
@@ -335,9 +314,9 @@ async function submitBorrow() {
 
   let recordId = Date.now();
 
-  if (supabase) {
+  if (sbClient) {
     try {
-      const { data, error } = await supabase.from('borrow_records').insert([dbPayload]).select();
+      const { data, error } = await sbClient.from('borrow_records').insert([dbPayload]).select();
       if (!error && data && data.length > 0) {
         recordId = data[0].id;
       }
@@ -369,7 +348,6 @@ async function submitBorrow() {
   updateCounts();
   alert(`【借出登記成功】\n物品：${itemName}`);
 
-  // 清空輸入欄位
   document.getElementById('borrowItemId').value = '';
   document.getElementById('borrowItemName').value = '';
   document.getElementById('borrowItemDisplay').value = '';
@@ -380,7 +358,6 @@ async function submitBorrow() {
   navigateTo('viewHome');
 }
 
-// 歸還登記送出
 async function submitReturn() {
   if (!pendingReturnRecord) {
     alert('請先掃描或選取欲歸還的物品條碼！');
@@ -403,9 +380,9 @@ async function submitReturn() {
     status: 'returned'
   };
 
-  if (supabase) {
+  if (sbClient) {
     try {
-      await supabase.from('borrow_records').update(updatePayload).eq('id', pendingReturnRecord.id);
+      await sbClient.from('borrow_records').update(updatePayload).eq('id', pendingReturnRecord.id);
     } catch (err) {
       console.warn("更新雲端失敗，轉為更新本機資料", err);
     }
@@ -420,7 +397,6 @@ async function submitReturn() {
   updateCounts();
   alert(`【物品歸還結案成功】\n物品：${pendingReturnRecord.itemName}`);
 
-  // 清空重置歸還暫存
   pendingReturnRecord = null;
   document.getElementById('returnRefPanel').style.display = 'none';
   document.getElementById('returnRemark').value = '';
@@ -428,7 +404,6 @@ async function submitReturn() {
   navigateTo('viewHome');
 }
 
-// 切換詳細資料分頁
 function switchDetailTab(tab) {
   currentDetailTab = tab;
   const btnUn = document.getElementById('tabUnreturned');
@@ -438,7 +413,6 @@ function switchDetailTab(tab) {
   renderTable();
 }
 
-// 渲染詳細歷程表格
 function renderTable() {
   const tbody = document.getElementById('recordTableBody');
   if (!tbody) return;
@@ -491,7 +465,6 @@ function renderTable() {
   });
 }
 
-// 程式進入點
 window.addEventListener('DOMContentLoaded', async () => {
   updateCounts();
   await initSupabase();
