@@ -5,11 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>物品借還管理系統</title>
   
-  <!-- 引入開源相機掃描、手寫簽名、Supabase SDK -->
-  <script src="https://unpkg.com/html5-qrcode"></script>
-  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
   <style>
     * {
       box-sizing: border-box;
@@ -32,7 +27,7 @@
       display: none;
     }
     .view-section.active {
-      display: block;
+      display: block !important;
     }
 
     .top-bar {
@@ -55,7 +50,7 @@
       cursor: pointer;
     }
 
-    .status-pill {
+    .cloud-status {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -71,8 +66,8 @@
       height: 8px;
       border-radius: 50%;
     }
-    .dot-green { background: #16a34a; }
-    .dot-red { background: #dc2626; }
+    .dot-online { background: #16a34a; }
+    .dot-offline { background: #dc2626; }
 
     .home-header {
       text-align: center;
@@ -348,6 +343,23 @@
     .badge-teacher { background: #fef3c7; color: #92400e; }
     .badge-student { background: #e0e7ff; color: #3730a3; }
   </style>
+
+  <!-- 獨立頁面切換控制，確保完全不被任何外部 JS 影響 -->
+  <script>
+    function navigateTo(viewId) {
+      const sections = document.getElementsByClassName('view-section');
+      for (let i = 0; i < sections.length; i++) {
+        sections[i].classList.remove('active');
+      }
+      const target = document.getElementById(viewId);
+      if (target) {
+        target.classList.add('active');
+      }
+      if (window.onPageNavigated) {
+        window.onPageNavigated(viewId);
+      }
+    }
+  </script>
 </head>
 <body>
 
@@ -356,10 +368,11 @@
     <!-- 1. 入口首頁 -->
     <section id="viewHome" class="view-section active">
       <div style="display:flex; justify-content:space-between; align-items:center;">
-        <span class="status-pill" id="cloudStatusBadge">
-          <span class="dot dot-red" id="cloudDot"></span>
-          <span id="cloudStatusText">連線檢測中...</span>
+        <span class="cloud-status" id="cloudStatusBadge">
+          <span class="dot dot-offline" id="cloudDot"></span>
+          <span id="cloudStatusText">檢查連線中...</span>
         </span>
+        <button class="btn-action" style="padding:4px 10px; font-size:0.75rem; background:#4b5563;" onclick="if(window.syncOfflineQueue) syncOfflineQueue()">同步離線資料</button>
       </div>
 
       <div class="home-header">
@@ -370,11 +383,11 @@
       <div class="menu-grid">
         <div class="menu-card btn-borrow" onclick="navigateTo('viewBorrow')">
           <h3 style="color: #2563eb;">借用登記</h3>
-          <p>掃描條碼・身分登記・手寫簽名</p>
+          <p>掃描條碼・身分登記・簽名</p>
         </div>
         <div class="menu-card btn-return" onclick="navigateTo('viewReturn')">
           <h3 style="color: #16a34a;">歸還登記</h3>
-          <p>掃描條碼・核對手寫簽名結案</p>
+          <p>掃描條碼・核對資訊結案</p>
         </div>
         <div class="menu-card btn-details" onclick="navigateTo('viewDetails')">
           <h3 style="color: #374151;">詳細資料</h3>
@@ -394,18 +407,18 @@
         <div class="scanner-row">
           <div id="readerBorrow" class="scan-viewfinder"></div>
           <div class="scan-desc">
-            <p style="font-weight:600;">掃描鑰匙圈 QR Code</p>
-            <p style="font-size:0.8rem; color:#6b7280; margin-top:2px;">對準鏡頭或點擊模擬按鈕</p>
-            <button class="btn-action" id="btnCamBorrow" onclick="toggleCamera('borrow')">開啟相機</button>
+            <p style="font-weight:600;">掃描鑰匙圈 QR Code (前鏡頭)</p>
+            <p style="font-size:0.8rem; color:#6b7280; margin-top:2px;">將條碼湊近前鏡頭約 15-20 公分</p>
+            <button class="btn-action" id="btnCamBorrow" onclick="if(window.toggleCamera) toggleCamera('borrow')">開啟前相機</button>
             <div style="margin-top:6px; display:flex; gap:6px;">
-              <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="mockScanBorrow('K01')">模擬掃碼 [K01]</button>
-              <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="mockScanBorrow('K02')">模擬掃碼 [K02]</button>
+              <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="if(window.mockScanBorrow) mockScanBorrow('K01')">模擬掃碼 [K01]</button>
+              <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="if(window.mockScanBorrow) mockScanBorrow('K02')">模擬掃碼 [K02]</button>
             </div>
           </div>
         </div>
 
         <div class="form-group">
-          <label>借出物品 (代碼與名稱)</label>[span_1](start_span)[span_1](end_span)
+          <label>借出物品 (代碼與名稱)</label>
           <input type="text" id="borrowItemDisplay" placeholder="請掃描條碼" readonly>
           <input type="hidden" id="borrowItemId">
           <input type="hidden" id="borrowItemName">
@@ -415,29 +428,27 @@
           <label>借用人身分</label>
           <div class="role-selection">
             <label class="role-option">
-              <input type="radio" name="borrowRole" value="student" checked onchange="toggleRoleFields()">
+              <input type="radio" name="borrowRole" value="student" checked onchange="if(window.toggleRoleFields) toggleRoleFields()">
               學生
             </label>
             <label class="role-option">
-              <input type="radio" name="borrowRole" value="teacher" onchange="toggleRoleFields()">
+              <input type="radio" name="borrowRole" value="teacher" onchange="if(window.toggleRoleFields) toggleRoleFields()">
               教師
             </label>
           </div>
         </div>
 
-        <!-- 學生專用欄位 -->
         <div class="form-row" id="groupStudent">
           <div class="form-group">
-            <label>班級</label>[span_2](start_span)[span_2](end_span)
+            <label>班級</label>
             <input type="text" id="borrowStudentClass" placeholder="例：資三甲、高一1班">
           </div>
           <div class="form-group">
-            <label>座號</label>[span_3](start_span)[span_3](end_span)
+            <label>座號</label>
             <input type="number" id="borrowStudentSeat" placeholder="例：08" min="1">
           </div>
         </div>
 
-        <!-- 教師專用欄位：處室下拉選單 -->
         <div class="form-group" id="groupTeacher" style="display: none;">
           <label>處室單位</label>
           <select id="borrowTeacherDept">
@@ -451,40 +462,44 @@
           </select>
         </div>
 
+        <div class="form-group">
+          <label>借用人姓名 (文字打字)</label>
+          <input type="text" id="borrowerName" placeholder="請輸入借用人姓名">
+        </div>
+
         <div class="form-row">
           <div class="form-group">
-            <label>借用日期 / 時間</label>[span_4](start_span)[span_4](end_span)
+            <label>借用日期 / 時間</label>
             <input type="text" id="borrowTime" readonly>
           </div>
           <div class="form-group">
-            <label>數量</label>[span_5](start_span)[span_5](end_span)
+            <label>數量</label>
             <input type="number" id="borrowQty" value="1" min="1">
           </div>
         </div>
 
         <div class="form-group">
-          <label>用途說明</label>[span_6](start_span)[span_6](end_span)
-          <input type="text" id="borrowPurpose" placeholder="例：課後實作、教室清潔">
+          <label>用途說明</label>
+          <input type="text" id="borrowPurpose" placeholder="例：活動彩排、課程教學">
         </div>
 
-        <!-- 借用人手寫姓名簽名區 -->
         <div class="form-group">
-          <label>借用人手寫姓名 (簽名)</label>[span_7](start_span)[span_7](end_span)
+          <label>借用人簽名</label>
           <div class="sign-box">
             <canvas id="padBorrow"></canvas>
           </div>
           <div class="sign-meta">
-            <span>請借用人於上方框架內手寫姓名簽名</span>
-            <button type="button" class="btn-clear" onclick="if(padBorrow) padBorrow.clear()">清除重簽</button>
+            <span>請借用人於上方框架內書寫簽名</span>
+            <button type="button" class="btn-clear" onclick="if(window.padBorrow) padBorrow.clear()">清除重簽</button>
           </div>
         </div>
 
         <div class="notice">
-          ※ 請妥善保管借出物品、設備，如有遺失或損壞需擔負損害賠償責任。[span_8](start_span)[span_8](end_span)<br>
-          ※ 請確實登記借出物品、數量、借出/歸還日期時間、借用人手寫簽名、歸還人手寫簽名及用途說明，用畢後請儘快歸還至本處。[span_9](start_span)[span_9](end_span)
+          ※ 請妥善保管借出物品、設備，如有遺失或損壞需擔負損害賠償責任。<br>
+          ※ 請確實登記借出物品、數量、借出/歸還日期時間、借用人簽名、歸還人簽名及用途說明，用畢後請儘快歸還至本處。
         </div>
 
-        <button class="btn-submit btn-blue" onclick="submitBorrow()">確認借出登記</button>
+        <button class="btn-submit btn-blue" onclick="if(window.submitBorrow) submitBorrow()">確認借出登記</button>
       </div>
     </section>
 
@@ -499,11 +514,11 @@
         <div class="scanner-row">
           <div id="readerReturn" class="scan-viewfinder"></div>
           <div class="scan-desc">
-            <p style="font-weight:600;">掃描歸還物品條碼</p>
+            <p style="font-weight:600;">掃描歸還物品條碼 (前鏡頭)</p>
             <p style="font-size:0.8rem; color:#6b7280; margin-top:2px;">系統將自動載入該物品當初借用紀錄</p>
-            <button class="btn-action" id="btnCamReturn" onclick="toggleCamera('return')">開啟相機</button>
+            <button class="btn-action" id="btnCamReturn" onclick="if(window.toggleCamera) toggleCamera('return')">開啟前相機</button>
             <div style="margin-top:6px; display:flex; gap:6px;">
-              <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="mockScanReturn('K01')">模擬歸還 [K01]</button>
+              <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="if(window.mockScanReturn) mockScanReturn('K01')">模擬歸還 [K01]</button>
             </div>
           </div>
         </div>
@@ -513,34 +528,39 @@
           <div class="ref-grid">
             <div><strong>物品名稱：</strong><span id="refItem">-</span></div>
             <div><strong>借出時間：</strong><span id="refTime">-</span></div>
-            <div><strong>借用人身分：</strong><span id="refBorrower">-</span></div>
+            <div><strong>借用身分：</strong><span id="refBorrower">-</span></div>
+            <div><strong>姓名：</strong><span id="refBorrowerName">-</span></div>
             <div><strong>數量 / 用途：</strong><span id="refPurpose">-</span></div>
           </div>
         </div>
 
         <div class="form-group">
-          <label>歸還日期 / 時間</label>[span_10](start_span)[span_10](end_span)
+          <label>歸還人姓名 (文字打字)</label>
+          <input type="text" id="returnerName" placeholder="請輸入歸還人姓名">
+        </div>
+
+        <div class="form-group">
+          <label>歸還日期 / 時間</label>
           <input type="text" id="returnTime" readonly>
         </div>
 
-        <!-- 歸還人手寫姓名簽名區 -->
         <div class="form-group">
-          <label>歸還人手寫姓名 (簽名)</label>[span_11](start_span)[span_11](end_span)
+          <label>歸還人簽名</label>
           <div class="sign-box">
             <canvas id="padReturn"></canvas>
           </div>
           <div class="sign-meta">
-            <span>請歸還人於上方框架內手寫姓名簽名</span>
-            <button type="button" class="btn-clear" onclick="if(padReturn) padReturn.clear()">清除重簽</button>
+            <span>請歸還人於上方框架內書寫簽名</span>
+            <button type="button" class="btn-clear" onclick="if(window.padReturn) padReturn.clear()">清除重簽</button>
           </div>
         </div>
 
         <div class="form-group">
-          <label>備註</label>[span_12](start_span)[span_12](end_span)
+          <label>備註</label>
           <textarea id="returnRemark" rows="2" placeholder="設備歸還狀況良好 / 異常狀況填報"></textarea>
         </div>
 
-        <button class="btn-submit" onclick="submitReturn()">確認歸還結案</button>
+        <button class="btn-submit" onclick="if(window.submitReturn) submitReturn()">確認歸還結案</button>
       </div>
     </section>
 
@@ -552,8 +572,8 @@
       </div>
 
       <div class="tabs">
-        <button class="tab-btn active" id="tabUnreturned" onclick="switchDetailTab('unreturned')">已借未還清單 (<span id="countUnreturned">0</span>)</button>
-        <button class="tab-btn" id="tabReturned" onclick="switchDetailTab('returned')">已借歸還紀錄 (<span id="countReturned">0</span>)</button>
+        <button class="tab-btn active" id="tabUnreturned" onclick="if(window.switchDetailTab) switchDetailTab('unreturned')">已借未還清單 (<span id="countUnreturned">0</span>)</button>
+        <button class="tab-btn" id="tabReturned" onclick="if(window.switchDetailTab) switchDetailTab('returned')">已借歸還紀錄 (<span id="countReturned">0</span>)</button>
       </div>
 
       <div class="data-table-container">
@@ -563,10 +583,12 @@
               <th>狀態</th>
               <th>物品代碼與名稱</th>
               <th>借用單位 / 身分</th>
+              <th>借用人</th>
               <th>借用時間</th>
-              <th>借用手寫簽名</th>
+              <th>借用簽名</th>
+              <th id="thReturnerName" style="display:none;">歸還人</th>
               <th id="thReturnTime" style="display:none;">歸還時間</th>
-              <th id="thReturnSign" style="display:none;">歸還手寫簽名</th>
+              <th id="thReturnSign" style="display:none;">歸還簽名</th>
               <th id="thRemark" style="display:none;">備註</th>
             </tr>
           </thead>
@@ -578,444 +600,10 @@
 
   </div>
 
-  <script>
-    // ==============================================================
-    // 請填入你的 Supabase 連線資訊
-    // ==============================================================
-    const SUPABASE_URL = "https://你的專案ID.supabase.co";
-    const SUPABASE_ANON_KEY = "你的anon_public金鑰";
-
-    let supabase = null;
-    let records = JSON.parse(localStorage.getItem('borrow_records') || '[]');
-    let padBorrow = null, padReturn = null;
-    let activeScanner = null;
-    let pendingReturnRecord = null;
-    let currentDetailTab = 'unreturned';
-
-    const fallbackCatalog = {
-      "K01": "視聽教室鑰匙",
-      "K02": "電腦教室(一)鑰匙",
-      "K03": "電腦教室(二)鑰匙",
-      "K04": "活動中心大門鑰匙",
-      "K05": "會議室鑰匙"
-    };
-
-    function getNow() {
-      return new Date().toLocaleString('zh-TW', { hour12: false });
-    }
-
-    function initPad(canvasId) {
-      const canvas = document.getElementById(canvasId);
-      if (!canvas || !window.SignaturePad) return null;
-      const ratio = Math.max(window.devicePixelRatio || 1, 1);
-      canvas.width = canvas.offsetWidth * ratio;
-      canvas.height = canvas.offsetHeight * ratio;
-      const ctx = canvas.getContext("2d");
-      if (ctx) ctx.scale(ratio, ratio);
-      return new SignaturePad(canvas, { backgroundColor: 'rgb(255, 255, 255)' });
-    }
-
-    function toggleRoleFields() {
-      const checkedRadio = document.querySelector('input[name="borrowRole"]:checked');
-      if (!checkedRadio) return;
-      const role = checkedRadio.value;
-      const groupStudent = document.getElementById('groupStudent');
-      const groupTeacher = document.getElementById('groupTeacher');
-
-      if (role === 'student') {
-        groupStudent.style.display = 'grid';
-        groupTeacher.style.display = 'none';
-      } else {
-        groupStudent.style.display = 'none';
-        groupTeacher.style.display = 'block';
-      }
-    }
-
-    // 連線初始化：具備 4 秒超時偵錯機制
-    async function initSupabase() {
-      const dot = document.getElementById('cloudDot');
-      const text = document.getElementById('cloudStatusText');
-
-      if (!SUPABASE_URL || SUPABASE_URL.indexOf("你的專案ID") !== -1) {
-        dot.className = 'dot dot-red';
-        text.innerText = '本地離線模式 (未填金鑰)';
-        return;
-      }
-
-      if (!window.supabase || !window.supabase.createClient) {
-        dot.className = 'dot dot-red';
-        text.innerText = '本地離線模式 (SDK未載入)';
-        return;
-      }
-
-      try {
-        const cleanUrl = SUPABASE_URL.trim().replace(/\/$/, "");
-        const cleanKey = SUPABASE_ANON_KEY.trim();
-        supabase = window.supabase.createClient(cleanUrl, cleanKey);
-
-        const timeoutPromise = new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("連線逾時")), 4000)
-        );
-
-        const fetchPromise = supabase.from('borrow_records').select('id').limit(1);
-
-        const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
-
-        if (error) {
-          console.warn("Supabase 回傳錯誤:", error);
-          dot.className = 'dot dot-red';
-          text.innerText = '本地模式 (資料表名/權限異常)';
-        } else {
-          dot.className = 'dot dot-green';
-          text.innerText = '雲端資料庫已連線';
-        }
-      } catch (err) {
-        console.warn("連線檢測異常:", err);
-        dot.className = 'dot dot-red';
-        text.innerText = '本地離線模式 (連線超時)';
-      }
-    }
-
-    async function getItemName(code) {
-      if (sbClient) {
-        try {
-          const { data } = await supabase.from('items').select('name').eq('id', code).single();
-          if (data && data.name) return data.name;
-        } catch (e) {}
-      }
-      return fallbackCatalog[code] || `物品 (${code})`;
-    }
-
-    async function fetchCloudRecords() {
-      if (!supabase) return;
-      try {
-        const { data, error } = await supabase
-          .from('borrow_records')
-          .select('*')
-          .order('id', { ascending: false });
-        if (!error && data) {
-          records = data.map(r => ({
-            id: r.id,
-            itemId: r.item_id,
-            itemName: r.item_name,
-            role: r.role,
-            studentClass: r.student_class,
-            studentSeat: r.student_seat,
-            teacherDept: r.teacher_dept,
-            borrowerDisplay: r.borrower_display,
-            qty: r.qty,
-            borrowTime: r.borrow_time,
-            purpose: r.purpose,
-            borrowSign: r.borrow_sign,
-            returnTime: r.return_time,
-            returnSign: r.return_sign,
-            remark: r.remark,
-            status: r.status
-          }));
-          localStorage.setItem('borrow_records', JSON.stringify(records));
-          updateCounts();
-        }
-      } catch (err) {}
-    }
-
-    function updateCounts() {
-      const unreturned = records.filter(r => r.status === 'borrowed').length;
-      const returned = records.filter(r => r.status === 'returned').length;
-      const elUn = document.getElementById('countUnreturned');
-      const elRe = document.getElementById('countReturned');
-      if (elUn) elUn.innerText = unreturned;
-      if (elRe) elRe.innerText = returned;
-    }
-
-    function navigateTo(viewId) {
-      stopCamera();
-      document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
-      document.getElementById(viewId).classList.add('active');
-
-      if (viewId === 'viewBorrow') {
-        document.getElementById('borrowTime').value = getNow();
-        toggleRoleFields();
-        setTimeout(() => { padBorrow = initPad('padBorrow'); }, 200);
-      }
-      if (viewId === 'viewReturn') {
-        document.getElementById('returnTime').value = getNow();
-        setTimeout(() => { padReturn = initPad('padReturn'); }, 200);
-      }
-      if (viewId === 'viewDetails') {
-        renderTable();
-      }
-    }
-
-    async function handleScanResult(decodedText, mode) {
-      const code = decodedText.trim();
-      const name = await getItemName(code);
-
-      if (mode === 'borrow') {
-        const existing = records.find(r => r.itemId === code && r.status === 'borrowed');
-        if (existing) {
-          alert(`物品 [${code}] ${name} 已經借出中！\n借用人：${existing.borrowerDisplay}\n尚未歸還，無法重複借出。`);
-          return;
-        }
-        document.getElementById('borrowItemId').value = code;
-        document.getElementById('borrowItemName').value = name;
-        document.getElementById('borrowItemDisplay').value = `[${code}] ${name}`;
-        document.getElementById('borrowTime').value = getNow();
-      } else if (mode === 'return') {
-        const record = records.find(r => r.itemId === code && r.status === 'borrowed');
-        if (!record) {
-          alert(`查無物品 [${code}] ${name} 的借出中紀錄。`);
-          return;
-        }
-        pendingReturnRecord = record;
-        document.getElementById('refItem').innerText = `[${record.itemId}] ${record.itemName}`;
-        document.getElementById('refTime').innerText = record.borrowTime;
-        document.getElementById('refBorrower').innerText = `${record.role === 'teacher' ? '[教師] ' : '[學生] '}${record.borrowerDisplay}`;
-        document.getElementById('refPurpose').innerText = `${record.qty} 件 / ${record.purpose}`;
-        document.getElementById('returnRefPanel').style.display = 'block';
-        document.getElementById('returnTime').value = getNow();
-      }
-    }
-
-    function mockScanBorrow(code) { handleScanResult(code, 'borrow'); }
-    function mockScanReturn(code) { handleScanResult(code, 'return'); }
-
-    function toggleCamera(mode) {
-      if (!window.Html5Qrcode) {
-        alert("相機模組載入中，請稍候重試。");
-        return;
-      }
-      const containerId = mode === 'borrow' ? 'readerBorrow' : 'readerReturn';
-      const btnId = mode === 'borrow' ? 'btnCamBorrow' : 'btnCamReturn';
-      const btn = document.getElementById(btnId);
-
-      if (activeScanner) {
-        stopCamera();
-        btn.innerText = "開啟相機";
-        return;
-      }
-
-      activeScanner = new Html5Qrcode(containerId);
-      activeScanner.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 140, height: 140 } },
-        (decodedText) => {
-          handleScanResult(decodedText, mode);
-          stopCamera();
-          btn.innerText = "開啟相機";
-        },
-        () => {}
-      ).then(() => {
-        btn.innerText = "關閉相機";
-      }).catch(err => alert("相機啟動失敗: " + err));
-    }
-
-    function stopCamera() {
-      if (activeScanner) {
-        activeScanner.stop().catch(() => {});
-        activeScanner = null;
-      }
-    }
-
-    async function submitBorrow() {
-      const itemId = document.getElementById('borrowItemId').value;
-      const itemName = document.getElementById('borrowItemName').value;
-      const role = document.querySelector('input[name="borrowRole"]:checked').value;
-      const qty = parseInt(document.getElementById('borrowQty').value, 10) || 1;
-      const purpose = document.getElementById('borrowPurpose').value.trim();
-
-      let borrowerDisplay = '';
-      let studentClass = '';
-      let studentSeat = '';
-      let teacherDept = '';
-
-      if (!itemId) { alert('請先掃描借出物品 QR Code！'); return; }
-
-      if (role === 'student') {
-        studentClass = document.getElementById('borrowStudentClass').value.trim();
-        studentSeat = document.getElementById('borrowStudentSeat').value.trim();
-        if (!studentClass || !studentSeat) {
-          alert('學生借用請填寫「班級」與「座號」！');
-          return;
-        }
-        borrowerDisplay = `${studentClass} ${studentSeat} 號`;
-      } else {
-        teacherDept = document.getElementById('borrowTeacherDept').value;
-        borrowerDisplay = teacherDept;
-      }
-
-      if (!padBorrow || padBorrow.isEmpty()) {
-        alert('請借用人於畫布手寫姓名簽名！');
-        return;
-      }
-
-      const borrowSignData = padBorrow.toDataURL();
-      const borrowTimeVal = document.getElementById('borrowTime').value;
-
-      const dbPayload = {
-        item_id: itemId,
-        item_name: itemName,
-        role: role,
-        student_class: studentClass,
-        student_seat: studentSeat,
-        teacher_dept: teacherDept,
-        borrower_display: borrowerDisplay,
-        qty: qty,
-        borrow_time: borrowTimeVal,
-        purpose: purpose,
-        borrow_sign: borrowSignData,
-        status: 'borrowed'
-      };
-
-      let insertedId = Date.now();
-
-      if (supabase) {
-        try {
-          const { data, error } = await supabase.from('borrow_records').insert([dbPayload]).select();
-          if (!error && data && data.length > 0) {
-            insertedId = data[0].id;
-          }
-        } catch (err) {}
-      }
-
-      records.unshift({
-        id: insertedId,
-        itemId: itemId,
-        itemName: itemName,
-        role: role,
-        studentClass: studentClass,
-        studentSeat: studentSeat,
-        teacherDept: teacherDept,
-        borrowerDisplay: borrowerDisplay,
-        qty: qty,
-        borrowTime: borrowTimeVal,
-        purpose: purpose,
-        borrowSign: borrowSignData,
-        returnTime: '',
-        returnSign: '',
-        remark: '',
-        status: 'borrowed'
-      });
-
-      localStorage.setItem('borrow_records', JSON.stringify(records));
-      updateCounts();
-      alert(`【借出登記成功】！\n物品：${itemName}`);
-
-      document.getElementById('borrowItemId').value = '';
-      document.getElementById('borrowItemName').value = '';
-      document.getElementById('borrowItemDisplay').value = '';
-      document.getElementById('borrowStudentClass').value = '';
-      document.getElementById('borrowStudentSeat').value = '';
-      document.getElementById('borrowPurpose').value = '';
-      if (padBorrow) padBorrow.clear();
-      navigateTo('viewHome');
-    }
-
-    async function submitReturn() {
-      if (!pendingReturnRecord) {
-        alert('請先掃描要歸還的物品條碼！');
-        return;
-      }
-
-      if (!padReturn || padReturn.isEmpty()) {
-        alert('請歸還人於畫布手寫姓名簽名！');
-        return;
-      }
-
-      const returnTimeVal = document.getElementById('returnTime').value;
-      const returnSignData = padReturn.toDataURL();
-      const remarkVal = document.getElementById('returnRemark').value.trim();
-
-      const updatePayload = {
-        return_time: returnTimeVal,
-        return_sign: returnSignData,
-        remark: remarkVal,
-        status: 'returned'
-      };
-
-      if (supabase) {
-        try {
-          await supabase.from('borrow_records').update(updatePayload).eq('id', pendingReturnRecord.id);
-        } catch (err) {}
-      }
-
-      pendingReturnRecord.returnTime = returnTimeVal;
-      pendingReturnRecord.returnSign = returnSignData;
-      pendingReturnRecord.remark = remarkVal;
-      pendingReturnRecord.status = 'returned';
-
-      localStorage.setItem('borrow_records', JSON.stringify(records));
-      updateCounts();
-      alert(`【物品歸還結案成功】！\n物品：${pendingReturnRecord.itemName}`);
-
-      pendingReturnRecord = null;
-      document.getElementById('returnRefPanel').style.display = 'none';
-      document.getElementById('returnRemark').value = '';
-      if (padReturn) padReturn.clear();
-      navigateTo('viewHome');
-    }
-
-    function switchDetailTab(tab) {
-      currentDetailTab = tab;
-      document.getElementById('tabUnreturned').classList.toggle('active', tab === 'unreturned');
-      document.getElementById('tabReturned').classList.toggle('active', tab === 'returned');
-      renderTable();
-    }
-
-    function renderTable() {
-      const tbody = document.getElementById('recordTableBody');
-      const isReturnedTab = currentDetailTab === 'returned';
-
-      document.getElementById('thReturnTime').style.display = isReturnedTab ? '' : 'none';
-      document.getElementById('thReturnSign').style.display = isReturnedTab ? '' : 'none';
-      document.getElementById('thRemark').style.display = isReturnedTab ? '' : 'none';
-
-      const filtered = records.filter(r => isReturnedTab ? r.status === 'returned' : r.status === 'borrowed');
-      tbody.innerHTML = '';
-
-      if (filtered.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:#9ca3af; padding:24px;">目前沒有任何項目</td></tr>`;
-        return;
-      }
-
-      filtered.forEach(r => {
-        const tr = document.createElement('tr');
-        const badge = r.status === 'borrowed' 
-          ? `<span class="status-badge status-borrowed">借出中</span>` 
-          : `<span class="status-badge status-returned">已結案</span>`;
-
-        const roleBadge = r.role === 'teacher'
-          ? `<span class="role-badge badge-teacher">教師</span>`
-          : `<span class="role-badge badge-student">學生</span>`;
-        
-        const signBorrowImg = r.borrowSign ? `<img src="${r.borrowSign}" class="sign-thumbnail">` : '-';
-        const signReturnImg = r.returnSign ? `<img src="${r.returnSign}" class="sign-thumbnail">` : '-';
-
-        let html = `
-          <td>${badge}</td>
-          <td style="font-weight:600;">[${r.itemId}] ${r.itemName || r.itemId}</td>
-          <td>${roleBadge}${r.borrowerDisplay}</td>
-          <td>${r.borrowTime}</td>
-          <td>${signBorrowImg}</td>
-        `;
-
-        if (isReturnedTab) {
-          html += `
-            <td>${r.returnTime}</td>
-            <td>${signReturnImg}</td>
-            <td>${r.remark || '-'}</td>
-          `;
-        }
-
-        tr.innerHTML = html;
-        tbody.appendChild(tr);
-      });
-    }
-
-    window.addEventListener('DOMContentLoaded', async () => {
-      updateCounts();
-      await initSupabase();
-      await fetchCloudRecords();
-    });
-  </script>
+  <!-- 外部依賴套件與 app.js -->
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js"></script>
 </body>
 </html>
