@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>物品借還管理系統</title>
   
+  <!-- 外部函式庫：QR 掃描、電子簽名、Supabase SDK -->
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
     * {
@@ -53,9 +55,28 @@
       cursor: pointer;
     }
 
+    .cloud-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      background: #e5e7eb;
+      color: #4b5563;
+    }
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .dot-online { background: #16a34a; }
+    .dot-offline { background: #dc2626; }
+
     .home-header {
       text-align: center;
-      margin: 40px 0 30px;
+      margin: 30px 0 25px;
     }
     .home-header h1 {
       font-size: 2rem;
@@ -334,6 +355,14 @@
 
     <!-- 1. 入口首頁 -->
     <section id="viewHome" class="view-section active">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span class="cloud-status" id="cloudStatusBadge">
+          <span class="dot dot-online" id="cloudDot"></span>
+          <span id="cloudStatusText">資料庫連線中</span>
+        </span>
+        <button class="btn-action" style="padding:4px 10px; font-size:0.75rem; background:#4b5563;" onclick="syncOfflineQueue()">立即同步本地資料</button>
+      </div>
+
       <div class="home-header">
         <h1>物品借還管理系統</h1>
         <p>請依現場辦理需求點選對應功能</p>
@@ -370,8 +399,8 @@
             <p style="font-size:0.8rem; color:#6b7280; margin-top:2px;">將條碼湊近前鏡頭約 15-20 公分</p>
             <button class="btn-action" id="btnCamBorrow" onclick="toggleCamera('borrow')">開啟前相機</button>
             <div style="margin-top:6px; display:flex; gap:6px;">
-              <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="mockScanBorrow('K01')">模擬掃碼 [K01 視聽教室]</button>
-              <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="mockScanBorrow('K02')">模擬掃碼 [K02 電腦教室]</button>
+              <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="mockScanBorrow('K01')">模擬掃碼 [K01]</button>
+              <button class="btn-action" style="background:#4b5563; font-size:0.8rem;" onclick="mockScanBorrow('K02')">模擬掃碼 [K02]</button>
             </div>
           </div>
         </div>
@@ -397,7 +426,6 @@
           </div>
         </div>
 
-        <!-- 學生專用欄位 -->
         <div class="form-row" id="groupStudent">
           <div class="form-group">
             <label>班級</label>
@@ -409,7 +437,6 @@
           </div>
         </div>
 
-        <!-- 教師專用欄位 -->
         <div class="form-group" id="groupTeacher" style="display: none;">
           <label>處室單位</label>
           <select id="borrowTeacherDept">
@@ -484,7 +511,6 @@
           </div>
         </div>
 
-        <!-- 原借出資訊核對卡片 -->
         <div class="borrow-ref-panel" id="returnRefPanel" style="display:none;">
           <h4>原借出資訊核對</h4>
           <div class="ref-grid">
@@ -563,25 +589,25 @@
   </div>
 
   <script>
-    // ==========================================
-    // 物品名冊對照表 (代碼 -> 中文名稱)
-    // 隨時可以在此擴充新增物品
-    // ==========================================
-    const itemCatalog = {
+    // ==============================================================
+    // 請在此填入你的 Supabase Project URL 與 Anon Key
+    // ==============================================================
+    const SUPABASE_URL = "https://qdiwyzkjgxvuinulpvsg.supabase.co";
+    const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkaXd5emtqZ3h2dWludWxwdnNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4Mjg4ODQsImV4cCI6MjEwNTQwNDg4NH0.U_IUlKcz-6Qgr_AmEf-EyVTabdfs5oMEQXujBiRDfVg";
+    
+    // 初始化 Supabase 客戶端
+    const supabase = (SUPABASE_URL.indexOf("你的專案ID") === -1) 
+      ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY) 
+      : null;
+
+    // 離線預設名冊（當初次完全無網時的備用）
+    const fallbackCatalog = {
       "K01": "視聽教室鑰匙",
       "K02": "電腦教室(一)鑰匙",
       "K03": "電腦教室(二)鑰匙",
       "K04": "活動中心大門鑰匙",
-      "K05": "會議室鑰匙",
-      "K06": "體育器材室鑰匙",
-      "K07": "創客教室鑰匙",
-      "DEV-01": "無線麥克風組",
-      "DEV-02": "單槍投影機"
+      "K05": "會議室鑰匙"
     };
-
-    function getItemName(code) {
-      return itemCatalog[code] || "未登記物品 (" + code + ")";
-    }
 
     let records = JSON.parse(localStorage.getItem('borrow_records') || '[]');
     let padBorrow, padReturn;
@@ -617,37 +643,118 @@
       }
     }
 
-    window.addEventListener('DOMContentLoaded', () => {
-      // 預設一筆測試借出資料 (K01 視聽教室)
-      if (records.length === 0) {
-        records.push({
-          id: 'REC-001',
-          itemId: 'K01',
-          itemName: '視聽教室鑰匙',
-          role: 'teacher',
-          studentClass: '',
-          studentSeat: '',
-          teacherDept: '教務處',
-          borrowerDisplay: '教務處',
-          borrowerName: '林組長',
-          qty: 1,
-          borrowTime: '2026/09/18 10:30:00',
-          purpose: '專題實作',
-          borrowSign: '',
-          returnerName: '',
-          returnTime: '',
-          returnSign: '',
-          remark: '',
-          status: 'borrowed'
-        });
-        saveRecords();
-      }
-      updateCounts();
-    });
+    // 離線優先查詢物品名稱
+    function getItemName(code) {
+      const cached = JSON.parse(localStorage.getItem('cached_items') || '{}');
+      if (cached[code]) return cached[code];
+      if (fallbackCatalog[code]) return fallbackCatalog[code];
+      return "未登記物品 (" + code + ")";
+    }
 
-    function saveRecords() {
-      localStorage.setItem('borrow_records', JSON.stringify(records));
+    // 連網時同步物品名冊至本地快取
+    async function syncItemCatalog() {
+      if (!supabase || !navigator.onLine) return;
+      try {
+        const { data, error } = await supabase.from('items').select('id, name');
+        if (!error && data) {
+          const catalog = {};
+          data.forEach(item => { catalog[item.id] = item.name; });
+          localStorage.setItem('cached_items', JSON.stringify(catalog));
+          console.log("物品名冊已自 Supabase 成功更新至本地快取！");
+        }
+      } catch (err) {
+        console.warn("無法同步物品名冊，採用本地快取", err);
+      }
+    }
+
+    // 取得最新借還紀錄 (優先取雲端，失敗取本地)
+    async function fetchRecords() {
+      if (supabase && navigator.onLine) {
+        try {
+          const { data, error } = await supabase
+            .from('borrow_records')
+            .select('*')
+            .order('id', { ascending: false });
+          if (!error && data) {
+            // 轉換資料表欄位格式
+            records = data.map(r => ({
+              id: r.id,
+              itemId: r.item_id,
+              itemName: r.item_name,
+              role: r.role,
+              studentClass: r.student_class,
+              studentSeat: r.student_seat,
+              teacherDept: r.teacher_dept,
+              borrowerDisplay: r.borrower_display,
+              borrowerName: r.borrower_name,
+              qty: r.qty,
+              borrowTime: r.borrow_time,
+              purpose: r.purpose,
+              borrowSign: r.borrow_sign,
+              returnerName: r.returner_name,
+              returnTime: r.return_time,
+              returnSign: r.return_sign,
+              remark: r.remark,
+              status: r.status
+            }));
+            localStorage.setItem('borrow_records', JSON.stringify(records));
+            updateConnectionStatus(true);
+            updateCounts();
+            return;
+          }
+        } catch (err) {
+          console.warn("雲端讀取失敗，進入本機離線模式", err);
+        }
+      }
+      updateConnectionStatus(false);
       updateCounts();
+    }
+
+    function updateConnectionStatus(isOnline) {
+      const dot = document.getElementById('cloudDot');
+      const text = document.getElementById('cloudStatusText');
+      if (isOnline && navigator.onLine) {
+        dot.className = 'dot dot-online';
+        text.innerText = '雲端資料庫已同步';
+      } else {
+        dot.className = 'dot dot-offline';
+        text.innerText = '離線暫存模式中';
+      }
+    }
+
+    // 離線佇列同步：重新連線時將本地累積的紀錄推上雲端
+    async function syncOfflineQueue() {
+      if (!supabase || !navigator.onLine) {
+        alert("目前處於斷網狀態，無法同步。");
+        return;
+      }
+      const queue = JSON.parse(localStorage.getItem('offline_queue') || '[]');
+      if (queue.length === 0) {
+        alert("本機無待同步紀錄，目前與雲端一致。");
+        await fetchRecords();
+        return;
+      }
+
+      let successCount = 0;
+      for (const item of queue) {
+        if (item.action === 'insert') {
+          const { error } = await supabase.from('borrow_records').insert([item.payload]);
+          if (!error) successCount++;
+        } else if (item.action === 'update') {
+          const { error } = await supabase.from('borrow_records').update(item.payload).eq('id', item.recordId);
+          if (!error) successCount++;
+        }
+      }
+
+      localStorage.removeItem('offline_queue');
+      alert(`已成功補送 ${successCount} 筆離線紀錄至雲端！`);
+      await fetchRecords();
+    }
+
+    function saveOfflineAction(action, payload, recordId = null) {
+      const queue = JSON.parse(localStorage.getItem('offline_queue') || '[]');
+      queue.push({ action, payload, recordId });
+      localStorage.setItem('offline_queue', JSON.stringify(queue));
     }
 
     function updateCounts() {
@@ -656,6 +763,17 @@
       document.getElementById('countUnreturned').innerText = unreturned;
       document.getElementById('countReturned').innerText = returned;
     }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      await syncItemCatalog();
+      await fetchRecords();
+
+      window.addEventListener('online', () => {
+        updateConnectionStatus(true);
+        syncOfflineQueue();
+      });
+      window.addEventListener('offline', () => updateConnectionStatus(false));
+    });
 
     function navigateTo(viewId) {
       stopCamera();
@@ -676,7 +794,6 @@
       }
     }
 
-    // 掃碼辨識處理 (帶出中文名稱)
     function handleScanResult(decodedText, mode) {
       const code = decodedText.trim();
       const name = getItemName(code);
@@ -746,12 +863,13 @@
       }
     }
 
-    function submitBorrow() {
+    // 提交借用：同時處理雲端與離線備援
+    async function submitBorrow() {
       const itemId = document.getElementById('borrowItemId').value;
       const itemName = document.getElementById('borrowItemName').value;
       const role = document.querySelector('input[name="borrowRole"]:checked').value;
       const borrowerName = document.getElementById('borrowerName').value.trim();
-      const qty = document.getElementById('borrowQty').value;
+      const qty = parseInt(document.getElementById('borrowQty').value, 10) || 1;
       const purpose = document.getElementById('borrowPurpose').value.trim();
 
       let borrowerDisplay = '';
@@ -781,8 +899,46 @@
 
       if (padBorrow.isEmpty()) { alert('請借用人於畫布手寫簽名！'); return; }
 
-      const newRecord = {
-        id: 'REC-' + Date.now(),
+      const borrowSignData = padBorrow.toDataURL();
+      const borrowTimeVal = document.getElementById('borrowTime').value;
+
+      // 準備存入 Supabase 的欄位格式
+      const dbPayload = {
+        item_id: itemId,
+        item_name: itemName,
+        role: role,
+        student_class: studentClass,
+        student_seat: studentSeat,
+        teacher_dept: teacherDept,
+        borrower_display: borrowerDisplay,
+        borrower_name: borrowerName,
+        qty: qty,
+        borrow_time: borrowTimeVal,
+        purpose: purpose,
+        borrow_sign: borrowSignData,
+        status: 'borrowed'
+      };
+
+      let insertedId = Date.now();
+
+      if (supabase && navigator.onLine) {
+        try {
+          const { data, error } = await supabase.from('borrow_records').insert([dbPayload]).select();
+          if (!error && data && data.length > 0) {
+            insertedId = data[0].id;
+          } else {
+            saveOfflineAction('insert', dbPayload);
+          }
+        } catch (err) {
+          saveOfflineAction('insert', dbPayload);
+        }
+      } else {
+        saveOfflineAction('insert', dbPayload);
+      }
+
+      // 寫入本地陣列更新畫面
+      records.unshift({
+        id: insertedId,
         itemId: itemId,
         itemName: itemName,
         role: role,
@@ -792,20 +948,20 @@
         borrowerDisplay: borrowerDisplay,
         borrowerName: borrowerName,
         qty: qty,
-        borrowTime: document.getElementById('borrowTime').value,
+        borrowTime: borrowTimeVal,
         purpose: purpose,
-        borrowSign: padBorrow.toDataURL(),
+        borrowSign: borrowSignData,
         returnerName: '',
         returnTime: '',
         returnSign: '',
         remark: '',
         status: 'borrowed'
-      };
+      });
 
-      records.unshift(newRecord);
-      saveRecords();
+      localStorage.setItem('borrow_records', JSON.stringify(records));
+      updateCounts();
       alert(`【借出登記成功】！\n物品：${itemName}`);
-      
+
       document.getElementById('borrowItemId').value = '';
       document.getElementById('borrowItemName').value = '';
       document.getElementById('borrowItemDisplay').value = '';
@@ -817,7 +973,8 @@
       navigateTo('viewHome');
     }
 
-    function submitReturn() {
+    // 提交歸還：更新雲端與本地紀錄
+    async function submitReturn() {
       if (!pendingReturnRecord) {
         alert('請先掃描要歸還的物品條碼！');
         return;
@@ -834,13 +991,40 @@
         return;
       }
 
+      const returnTimeVal = document.getElementById('returnTime').value;
+      const returnSignData = padReturn.toDataURL();
+      const remarkVal = document.getElementById('returnRemark').value.trim();
+
+      const updatePayload = {
+        returner_name: returnerName,
+        return_time: returnTimeVal,
+        return_sign: returnSignData,
+        remark: remarkVal,
+        status: 'returned'
+      };
+
+      if (supabase && navigator.onLine) {
+        try {
+          const { error } = await supabase.from('borrow_records').update(updatePayload).eq('id', pendingReturnRecord.id);
+          if (error) {
+            saveOfflineAction('update', updatePayload, pendingReturnRecord.id);
+          }
+        } catch (err) {
+          saveOfflineAction('update', updatePayload, pendingReturnRecord.id);
+        }
+      } else {
+        saveOfflineAction('update', updatePayload, pendingReturnRecord.id);
+      }
+
+      // 更新本機記憶體
       pendingReturnRecord.returnerName = returnerName;
-      pendingReturnRecord.returnTime = document.getElementById('returnTime').value;
-      pendingReturnRecord.returnSign = padReturn.toDataURL();
-      pendingReturnRecord.remark = document.getElementById('returnRemark').value.trim();
+      pendingReturnRecord.returnTime = returnTimeVal;
+      pendingReturnRecord.returnSign = returnSignData;
+      pendingReturnRecord.remark = remarkVal;
       pendingReturnRecord.status = 'returned';
 
-      saveRecords();
+      localStorage.setItem('borrow_records', JSON.stringify(records));
+      updateCounts();
       alert(`【物品歸還結案成功】！\n物品：${pendingReturnRecord.itemName}`);
 
       pendingReturnRecord = null;
