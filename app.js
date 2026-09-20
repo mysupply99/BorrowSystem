@@ -6,86 +6,76 @@ const SUPABASE_URL = "https://qdiwyzkjgxvuinulpvsg.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkaXd5emtqZ3h2dWludWxwdnNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4Mjg4ODQsImV4cCI6MjEwNTQwNDg4NH0.U_IUlKcz-6Qgr_AmEf-EyVTabdfs5oMEQXujBiRDfVg";
 
 
-
 let sbClient = null;
 let isOnline = false;
 
-// 預設物品對照表 (掃碼或離線時解析品名用)
+// 預設物品對照表
 const ITEM_MAP = {
   "K01": "視聽教室鑰匙",
-  "K02": "電腦教室一鑰匙",
-  "K03": "電腦教室二鑰匙",
-  "K04": "創客中心鑰匙",
-  "K05": "會議室鑰匙"
+  "K02": "電腦教室鑰匙",
+  "K03": "創客中心鑰匙",
+  "K04": "會議室鑰匙",
+  "K05": "專科教室鑰匙"
 };
 
-// 全域簽名畫布物件與相機掃描實例
+// 全域簽名物件與掃碼實例
 let padBorrow = null;
 let padReturn = null;
 let html5QrBorrow = null;
 let html5QrReturn = null;
+let currentReturnRecordId = null;
 
 // ==========================================
-// 2. 初始化與連線檢查
+// 2. 初始化與啟動
 // ==========================================
 window.addEventListener("DOMContentLoaded", async () => {
-  initSignPads();
   initCloudConnection();
+  initSignPads();
   startClock();
-  
-  // 監聽網路連線切換
+
+  // 預設喚醒目前顯示的畫布
+  setTimeout(() => {
+    resizePadCanvas("padBorrow", padBorrow);
+  }, 100);
+
+  // 監聽離線/連網事件
   window.addEventListener("online", updateConnectionStatus);
   window.addEventListener("offline", updateConnectionStatus);
-  
-  // 載入資料庫紀錄
+
   await loadRecords();
 });
 
-// 初始化簽名畫布
-function initSignPads() {
-  const canvasBorrow = document.getElementById("padBorrow");
-  const canvasReturn = document.getElementById("padReturn");
-
-  function resizeCanvas(canvas) {
-    const ratio = Math.max(window.devicePixelRatio || 1, 1);
-    canvas.width = canvas.offsetWidth * ratio;
-    canvas.height = canvas.offsetHeight * ratio;
-    canvas.getContext("2d").scale(ratio, ratio);
-  }
-
-  if (canvasBorrow) {
-    resizeCanvas(canvasBorrow);
-    padBorrow = new SignaturePad(canvasBorrow, { backgroundColor: 'rgb(255, 255, 255)' });
-    window.padBorrow = padBorrow;
-  }
-  if (canvasReturn) {
-    resizeCanvas(canvasReturn);
-    padReturn = new SignaturePad(canvasReturn, { backgroundColor: 'rgb(255, 255, 255)' });
-    window.padReturn = padReturn;
-  }
-
-  window.addEventListener("resize", () => {
-    if (canvasBorrow) resizeCanvas(canvasBorrow);
-    if (canvasReturn) resizeCanvas(canvasReturn);
-  });
+// 即時時鐘產生器
+function startClock() {
+  const update = () => {
+    const now = new Date();
+    const timeStr = now.toLocaleString("zh-TW", { hour12: false });
+    const bTime = document.getElementById("borrowTime");
+    const rTime = document.getElementById("returnTime");
+    if (bTime) bTime.value = timeStr;
+    if (rTime) rTime.value = timeStr;
+  };
+  update();
+  setInterval(update, 1000);
 }
 
-// 初始化 Supabase
+// 初始化 Supabase 連線
 function initCloudConnection() {
-  if (window.supabase && SUPABASE_URL.startsWith("http")) {
+  if (window.supabase && SUPABASE_URL.startsWith("http") && !SUPABASE_URL.includes("你的專案ID")) {
     sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }
   updateConnectionStatus();
 }
 
-// 更新首頁狀態燈
+// 連線燈號檢查
 async function updateConnectionStatus() {
   const dot = document.getElementById("cloudDot");
   const text = document.getElementById("cloudStatusText");
+
   if (!navigator.onLine || !sbClient) {
     isOnline = false;
     if (dot) dot.className = "dot dot-offline";
-    if (text) text.innerText = "離線模式 (本機暫存)";
+    if (text) text.innerText = "本地暫存模式";
     return;
   }
 
@@ -98,37 +88,122 @@ async function updateConnectionStatus() {
   } catch (err) {
     isOnline = false;
     if (dot) dot.className = "dot dot-offline";
-    if (text) text.innerText = "連線異常 (檢查 RLS 或網路)";
+    if (text) text.innerText = "連線受限 (本地暫存)";
   }
 }
 
-// 即時時鐘產生器
-function startClock() {
-  setInterval(() => {
-    const now = new Date();
-    const timeString = now.toLocaleString("zh-TW", { hour12: false });
-    const bTime = document.getElementById("borrowTime");
-    const rTime = document.getElementById("returnTime");
-    if (bTime) bTime.value = timeString;
-    if (rTime) rTime.value = timeString;
-  }, 1000);
+// ==========================================
+// 3. 電子簽名畫布核心 (徹底解決寬高歸零與筆跡問題)
+// ==========================================
+function initSignPads() {
+  const canvasBorrow = document.getElementById("padBorrow");
+  const canvasReturn = document.getElementById("padReturn");
+
+  if (canvasBorrow) {
+    padBorrow = new SignaturePad(canvasBorrow, {
+      backgroundColor: "rgb(255, 255, 255)",
+      penColor: "rgb(0, 0, 0)",
+      minWidth: 1.5,
+      maxWidth: 3.5
+    });
+  }
+
+  if (canvasReturn) {
+    padReturn = new SignaturePad(canvasReturn, {
+      backgroundColor: "rgb(255, 255, 255)",
+      penColor: "rgb(0, 0, 0)",
+      minWidth: 1.5,
+      maxWidth: 3.5
+    });
+  }
+
+  window.addEventListener("resize", () => {
+    resizePadCanvas("padBorrow", padBorrow);
+    resizePadCanvas("padReturn", padReturn);
+  });
 }
 
-// 頁面跳轉時觸發相機與畫布調整
-window.onPageNavigated = function(viewId) {
-  if (viewId === "viewBorrow" && padBorrow) {
-    padBorrow.clear();
+function resizePadCanvas(canvasId, padInstance) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || !padInstance) return;
+
+  const width = canvas.parentElement.clientWidth;
+  const height = canvas.parentElement.clientHeight;
+
+  // 若父容器為 display:none 寬高會是 0，此時不調整
+  if (width === 0 || height === 0) return;
+
+  const ratio = Math.max(window.devicePixelRatio || 1, 1);
+  const data = !padInstance.isEmpty() ? padInstance.toData() : null;
+
+  canvas.width = width * ratio;
+  canvas.height = height * ratio;
+  canvas.style.width = width + "px";
+  canvas.style.height = height + "px";
+
+  const ctx = canvas.getContext("2d");
+  ctx.scale(ratio, ratio);
+
+  padInstance.clear();
+  if (data) {
+    padInstance.fromData(data);
   }
-  if (viewId === "viewReturn" && padReturn) {
-    padReturn.clear();
-  }
-  if (viewId === "viewDetails") {
-    loadRecords();
-  }
+}
+
+window.clearSignPad = function(type) {
+  if (type === "borrow" && padBorrow) padBorrow.clear();
+  if (type === "return" && padReturn) padReturn.clear();
 };
 
 // ==========================================
-// 3. 身分切換 (學生 / 教師)
+// 4. 視圖導覽切換 (包含畫布即時喚醒)
+// ==========================================
+window.navigateTo = function(targetViewId) {
+  // 切換導覽按鈕樣式
+  document.querySelectorAll(".nav-btn-group .btn-nav").forEach(b => b.classList.remove("active"));
+  if (targetViewId === "viewBorrow") document.getElementById("btnNavBorrow").classList.add("active");
+  if (targetViewId === "viewReturn") document.getElementById("btnNavReturn").classList.add("active");
+  if (targetViewId === "viewDetails") document.getElementById("btnNavDetails").classList.add("active");
+
+  // 關閉相機避免佔用資源
+  stopAllCameras();
+
+  // 切換視圖主體
+  document.querySelectorAll(".view-section").forEach(sec => sec.style.display = "none");
+  const activeSec = document.getElementById(targetViewId);
+  if (activeSec) activeSec.style.display = "block";
+
+  // 延遲 50ms 確保 display: block 生效後計算真實 DOM 寬度
+  setTimeout(() => {
+    if (targetViewId === "viewBorrow") {
+      resizePadCanvas("padBorrow", padBorrow);
+    } else if (targetViewId === "viewReturn") {
+      resizePadCanvas("padReturn", padReturn);
+    } else if (targetViewId === "viewDetails") {
+      loadRecords();
+    }
+  }, 50);
+};
+
+function stopAllCameras() {
+  if (html5QrBorrow) {
+    html5QrBorrow.stop().then(() => {
+      html5QrBorrow.clear();
+      html5QrBorrow = null;
+      document.getElementById("btnCamBorrow").innerText = "開啟前鏡頭掃碼";
+    }).catch(() => {});
+  }
+  if (html5QrReturn) {
+    html5QrReturn.stop().then(() => {
+      html5QrReturn.clear();
+      html5QrReturn = null;
+      document.getElementById("btnCamReturn").innerText = "開啟前鏡頭掃碼";
+    }).catch(() => {});
+  }
+}
+
+// ==========================================
+// 5. 掃描與身分切換
 // ==========================================
 window.toggleRoleFields = function() {
   const role = document.querySelector('input[name="borrowRole"]:checked').value;
@@ -140,15 +215,12 @@ window.toggleRoleFields = function() {
     groupTeacher.style.display = "none";
   } else {
     groupStudent.style.display = "none";
-    groupTeacher.style.display = "block";
+    groupTeacher.style.display = "flex";
   }
 };
 
-// ==========================================
-// 4. 相機掃描與模擬功能
-// ==========================================
 window.toggleCamera = function(mode) {
-  const elementId = mode === "borrow" ? "readerBorrow" : "readerReturn";
+  const elemId = mode === "borrow" ? "readerBorrow" : "readerReturn";
   const btn = mode === "borrow" ? document.getElementById("btnCamBorrow") : document.getElementById("btnCamReturn");
 
   if (mode === "borrow") {
@@ -156,16 +228,16 @@ window.toggleCamera = function(mode) {
       html5QrBorrow.stop().then(() => {
         html5QrBorrow.clear();
         html5QrBorrow = null;
-        btn.innerText = "開啟前相機";
+        btn.innerText = "開啟前鏡頭掃碼";
       });
       return;
     }
-    html5QrBorrow = new Html5Qrcode(elementId);
+    html5QrBorrow = new Html5Qrcode(elemId);
     html5QrBorrow.start(
       { facingMode: "user" },
-      { fps: 10, qrbox: 180 },
-      (decodedText) => {
-        handleScanBorrow(decodedText);
+      { fps: 10, qrbox: 200 },
+      (text) => {
+        handleScanBorrow(text);
         window.toggleCamera("borrow");
       },
       () => {}
@@ -177,16 +249,16 @@ window.toggleCamera = function(mode) {
       html5QrReturn.stop().then(() => {
         html5QrReturn.clear();
         html5QrReturn = null;
-        btn.innerText = "開啟前相機";
+        btn.innerText = "開啟前鏡頭掃碼";
       });
       return;
     }
-    html5QrReturn = new Html5Qrcode(elementId);
+    html5QrReturn = new Html5Qrcode(elemId);
     html5QrReturn.start(
       { facingMode: "user" },
-      { fps: 10, qrbox: 180 },
-      (decodedText) => {
-        handleScanReturn(decodedText);
+      { fps: 10, qrbox: 200 },
+      (text) => {
+        handleScanReturn(text);
         window.toggleCamera("return");
       },
       () => {}
@@ -196,26 +268,18 @@ window.toggleCamera = function(mode) {
   }
 };
 
-// 掃描條碼解析
 function handleScanBorrow(code) {
   const cleanCode = code.trim().toUpperCase();
-  const itemName = ITEM_MAP[cleanCode] || "自訂/外部物品";
+  const itemName = ITEM_MAP[cleanCode] || "自訂物品";
   document.getElementById("borrowItemId").value = cleanCode;
   document.getElementById("borrowItemName").value = itemName;
   document.getElementById("borrowItemDisplay").value = `[${cleanCode}] ${itemName}`;
 }
-
-window.mockScanBorrow = function(code) {
-  handleScanBorrow(code);
-};
-
-let currentReturnRecordId = null;
+window.mockScanBorrow = handleScanBorrow;
 
 async function handleScanReturn(code) {
   const cleanCode = code.trim().toUpperCase();
-  const records = await getLocalOrCloudRecords();
-  
-  // 尋找最後一筆借出且未還的紀錄
+  const records = await fetchAllRecords();
   const activeRecord = records.find(r => r.item_id === cleanCode && r.status === "borrowed");
 
   if (!activeRecord) {
@@ -228,21 +292,19 @@ async function handleScanReturn(code) {
   panel.style.display = "block";
   document.getElementById("refItem").innerText = `[${activeRecord.item_id}] ${activeRecord.item_name || ''}`;
   document.getElementById("refTime").innerText = activeRecord.borrow_time || '-';
-  
-  const roleDesc = activeRecord.borrower_role === "teacher" 
-    ? `教師 (${activeRecord.borrower_dept || ''})` 
-    : `學生 (${activeRecord.borrower_class || ''} / ${activeRecord.borrower_seat || ''}號)`;
+
+  const roleDesc = activeRecord.borrower_role === "teacher"
+    ? `教師 (${activeRecord.borrower_dept || '未填單位'})`
+    : `學生 (${activeRecord.borrower_class || ''}班 ${activeRecord.borrower_seat || ''}號)`;
+
   document.getElementById("refBorrower").innerText = roleDesc;
   document.getElementById("refBorrowerName").innerText = activeRecord.borrower_name || '-';
-  document.getElementById("refPurpose").innerText = `${activeRecord.borrow_qty || 1} 個 / ${activeRecord.borrow_purpose || '無'}`;
+  document.getElementById("refPurpose").innerText = `${activeRecord.borrow_qty || 1} 個 / ${activeRecord.borrow_purpose || '一般用途'}`;
 }
-
-window.mockScanReturn = function(code) {
-  handleScanReturn(code);
-};
+window.mockScanReturn = handleScanReturn;
 
 // ==========================================
-// 5. 資料提交 (借用登記 & 歸還結案)
+// 6. 送出借出與歸還
 // ==========================================
 window.submitBorrow = async function() {
   const itemId = document.getElementById("borrowItemId").value;
@@ -254,7 +316,7 @@ window.submitBorrow = async function() {
   const borrowPurpose = document.getElementById("borrowPurpose").value.trim();
 
   if (!itemId) {
-    alert("請先掃描物品條碼！");
+    alert("請先掃描物品 QR Code！");
     return;
   }
   if (!borrowerName) {
@@ -262,11 +324,11 @@ window.submitBorrow = async function() {
     return;
   }
   if (!padBorrow || padBorrow.isEmpty()) {
-    alert("請在借用人簽名框內簽名！");
+    alert("請在「借用人簽名」框內簽署！");
     return;
   }
 
-  const signData = padBorrow.toDataURL("image/png");
+  const signBase64 = padBorrow.toDataURL("image/png");
 
   const newRecord = {
     id: "rec_" + Date.now(),
@@ -280,7 +342,7 @@ window.submitBorrow = async function() {
     borrow_time: borrowTime,
     borrow_qty: borrowQty,
     borrow_purpose: borrowPurpose,
-    borrow_sign: signData,
+    borrow_sign: signBase64,
     status: "borrowed",
     returner_name: null,
     return_time: null,
@@ -288,22 +350,23 @@ window.submitBorrow = async function() {
     return_remark: null
   };
 
-  await saveRecord(newRecord);
+  await saveSingleRecord(newRecord);
   alert("借出登記成功！");
-  
-  // 清空輸入
+
+  // 清空輸入項
   document.getElementById("borrowItemDisplay").value = "";
   document.getElementById("borrowItemId").value = "";
+  document.getElementById("borrowItemName").value = "";
   document.getElementById("borrowerName").value = "";
   document.getElementById("borrowPurpose").value = "";
   padBorrow.clear();
-  
+
   window.navigateTo("viewDetails");
 };
 
 window.submitReturn = async function() {
   if (!currentReturnRecordId) {
-    alert("請先掃描要歸還的物品條碼！");
+    alert("請先掃描要歸還的物品 QR Code！");
     return;
   }
   const returnerName = document.getElementById("returnerName").value.trim();
@@ -315,24 +378,23 @@ window.submitReturn = async function() {
     return;
   }
   if (!padReturn || padReturn.isEmpty()) {
-    alert("請在歸還人簽名框內簽名！");
+    alert("請在「歸還人簽名」框內簽署！");
     return;
   }
 
-  const signData = padReturn.toDataURL("image/png");
+  const signBase64 = padReturn.toDataURL("image/png");
 
   const updateFields = {
     status: "returned",
     returner_name: returnerName,
     return_time: returnTime,
-    return_sign: signData,
+    return_sign: signBase64,
     return_remark: returnRemark
   };
 
-  await updateRecord(currentReturnRecordId, updateFields);
-  alert("物品歸還登記成功！");
+  await updateSingleRecord(currentReturnRecordId, updateFields);
+  alert("歸還結案成功！");
 
-  // 清空輸入
   currentReturnRecordId = null;
   document.getElementById("returnRefPanel").style.display = "none";
   document.getElementById("returnerName").value = "";
@@ -343,76 +405,71 @@ window.submitReturn = async function() {
 };
 
 // ==========================================
-// 6. 資料儲存與載入 (支援 Supabase 與 LocalStorage)
+// 7. 資料存取層 (LocalStorage + Supabase)
 // ==========================================
-async function saveRecord(record) {
-  // 先寫入本機備份
-  const localList = JSON.parse(localStorage.getItem("offline_records") || "[]");
-  localList.unshift(record);
-  localStorage.setItem("offline_records", JSON.stringify(localList));
+async function saveSingleRecord(record) {
+  // 寫入本地緩存
+  const list = JSON.parse(localStorage.getItem("offline_records") || "[]");
+  list.unshift(record);
+  localStorage.setItem("offline_records", JSON.stringify(list));
 
+  // 連線至 Supabase
   if (isOnline && sbClient) {
-    const { error } = await sbClient.from("borrow_records").insert([record]);
-    if (error) {
-      console.error("Supabase 寫入失敗:", error);
+    try {
+      const { error } = await sbClient.from("borrow_records").insert([record]);
+      if (error) console.error("Supabase 寫入異常:", error);
+    } catch (e) {
+      console.error("雲端存取失敗，保留本地暫存:", e);
     }
   }
 }
 
-async function updateRecord(id, updateFields) {
-  const localList = JSON.parse(localStorage.getItem("offline_records") || "[]");
-  const idx = localList.findIndex(r => r.id === id);
+async function updateSingleRecord(id, fields) {
+  const list = JSON.parse(localStorage.getItem("offline_records") || "[]");
+  const idx = list.findIndex(r => r.id === id);
   if (idx !== -1) {
-    localList[idx] = { ...localList[idx], ...updateFields };
-    localStorage.setItem("offline_records", JSON.stringify(localList));
+    list[idx] = { ...list[idx], ...fields };
+    localStorage.setItem("offline_records", JSON.stringify(list));
   }
 
   if (isOnline && sbClient) {
-    const { error } = await sbClient.from("borrow_records").update(updateFields).eq("id", id);
-    if (error) {
-      console.error("Supabase 更新失敗:", error);
+    try {
+      const { error } = await sbClient.from("borrow_records").update(fields).eq("id", id);
+      if (error) console.error("Supabase 更新異常:", error);
+    } catch (e) {
+      console.error("雲端更新失敗:", e);
     }
   }
 }
 
-async function getLocalOrCloudRecords() {
+async function fetchAllRecords() {
   if (isOnline && sbClient) {
-    const { data, error } = await sbClient
-      .from("borrow_records")
-      .select("*")
-      .order("borrow_time", { ascending: false });
-    if (!error && data) {
-      localStorage.setItem("offline_records", JSON.stringify(data));
-      return data;
+    try {
+      const { data, error } = await sbClient
+        .from("borrow_records")
+        .select("*")
+        .order("borrow_time", { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        localStorage.setItem("offline_records", JSON.stringify(data));
+        return data;
+      }
+    } catch (e) {
+      console.warn("使用本地暫存記錄");
     }
   }
   return JSON.parse(localStorage.getItem("offline_records") || "[]");
 }
 
-// 手動同步本機資料至雲端
-window.syncOfflineQueue = async function() {
-  if (!sbClient) return alert("資料庫客戶端尚未建立！");
-  const localList = JSON.parse(localStorage.getItem("offline_records") || "[]");
-  if (localList.length === 0) return alert("本機無待同步資料！");
-
-  const { error } = await sbClient.from("borrow_records").upsert(localList);
-  if (error) {
-    alert("同步失敗：" + error.message);
-  } else {
-    alert("離線資料同步完成！");
-    await loadRecords();
-  }
-};
-
 // ==========================================
-// 7. 詳細資料清單渲染 (修正欄位錯位問題)
+// 8. 借還歷程清單渲染 (精確對齊欄位)
 // ==========================================
 let currentTab = "unreturned";
 
 window.switchDetailTab = function(tabName) {
   currentTab = tabName;
-  document.getElementById("tabUnreturned").className = tabName === "unreturned" ? "tab-btn active" : "tab-btn";
-  document.getElementById("tabReturned").className = tabName === "returned" ? "tab-btn active" : "tab-btn";
+  document.getElementById("tabUnreturned").className = tabName === "unreturned" ? "btn-nav tab-btn active" : "btn-nav tab-btn";
+  document.getElementById("tabReturned").className = tabName === "returned" ? "btn-nav tab-btn active" : "btn-nav tab-btn";
 
   const isRet = tabName === "returned";
   document.getElementById("thReturnerName").style.display = isRet ? "" : "none";
@@ -424,7 +481,7 @@ window.switchDetailTab = function(tabName) {
 };
 
 async function loadRecords() {
-  const records = await getLocalOrCloudRecords();
+  const records = await fetchAllRecords();
 
   const unreturnedList = records.filter(r => r.status === "borrowed");
   const returnedList = records.filter(r => r.status === "returned");
@@ -437,7 +494,7 @@ async function loadRecords() {
   tbody.innerHTML = "";
 
   if (displayList.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="${currentTab === 'unreturned' ? 6 : 10}" style="text-align:center; padding:30px; color:#9ca3af;">查無借還紀錄</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${currentTab === 'unreturned' ? 6 : 10}" style="text-align:center; padding:30px; color:#9ca3af;">查無相關借還記錄</td></tr>`;
     return;
   }
 
@@ -453,9 +510,10 @@ async function loadRecords() {
       : `<span class="role-badge badge-student">學生</span>`;
 
     const deptOrClass = rec.borrower_role === "teacher"
-      ? (rec.borrower_dept || "未填單位")
+      ? (rec.borrower_dept || "教務處")
       : `${rec.borrower_class || ''} (${rec.borrower_seat || ''}號)`;
 
+    // 精確對齊 6 格主要欄位
     let rowHtml = `
       <td>${statusHtml}</td>
       <td><strong>[${rec.item_id}]</strong> ${rec.item_name || ''}</td>
@@ -465,6 +523,7 @@ async function loadRecords() {
       <td>${rec.borrow_sign ? `<img src="${rec.borrow_sign}" class="sign-thumbnail">` : '-'}</td>
     `;
 
+    // 歸還分頁追加 4 格欄位
     if (currentTab === "returned") {
       rowHtml += `
         <td><strong>${rec.returner_name || '-'}</strong></td>
