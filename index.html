@@ -209,26 +209,19 @@
       height: 18px;
     }
 
-    /* 學生：班級、座號、姓名 同一行 */
-    .student-inputs-grid {
+    /* 動態網格容器：根據身分呈現欄位 */
+    .role-fields-container {
       display: grid;
-      grid-template-columns: 1fr 1fr 1.2fr;
       gap: 10px;
       width: 100%;
     }
-
-    /* 教職員：處室單位（左）、借用人姓名（右）強制同一行並排 */
-    .teacher-inputs-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      width: 100%;
-      align-items: center;
+    /* 學生時：班級 (1fr) + 座號 (1fr) + 借用人姓名 (1.2fr) */
+    .role-fields-container.mode-student {
+      grid-template-columns: 1fr 1fr 1.2fr;
     }
-
-    /* 隱藏專用 class，權重高保證生效 */
-    .role-hidden {
-      display: none !important;
+    /* 教職員時：處室單位 (1fr) + 借用人姓名 (1fr) */
+    .role-fields-container.mode-teacher {
+      grid-template-columns: 1fr 1fr;
     }
 
     /* 第 3 行：時間、數量、用途說明 同一行 */
@@ -503,7 +496,7 @@
           </div>
         </div>
 
-        <!-- 第 2 行：左側身分切換 + 右側填寫借用人資料 -->
+        <!-- 第 2 行：左側身分切換 + 右側統一填寫區 -->
         <div class="row-role-info">
           <div>
             <label>借用人身分</label>
@@ -519,42 +512,36 @@
             </div>
           </div>
 
-          <!-- 右側身分動態資料容器 -->
-          <div>
-            <!-- 學生模式：班級、座號、姓名 同一行 -->
-            <div class="student-inputs-grid" id="groupStudent">
-              <div>
-                <label>班級</label>
-                <input type="text" id="borrowStudentClass" placeholder="例：資三甲">
-              </div>
-              <div>
-                <label>座號</label>
-                <input type="number" id="borrowStudentSeat" placeholder="例：08" min="1">
-              </div>
-              <div>
-                <label>借用人姓名</label>
-                <input type="text" id="borrowName" placeholder="請輸入學生姓名" oninput="syncBorrowName(this.value)">
-              </div>
+          <!-- 右側身分動態資料容器（共用姓名欄位，徹底杜絕輸入鎖死） -->
+          <div class="role-fields-container mode-student" id="roleContainer">
+            <!-- 學生專用欄位 -->
+            <div id="colClass">
+              <label>班級</label>
+              <input type="text" id="borrowStudentClass" placeholder="例：資三甲">
+            </div>
+            <div id="colSeat">
+              <label>座號</label>
+              <input type="number" id="borrowStudentSeat" placeholder="例：08" min="1">
             </div>
 
-            <!-- 教職員模式：處室單位（左）、借用人姓名（右）預設隱藏 -->
-            <div class="teacher-inputs-grid role-hidden" id="groupTeacher">
-              <div>
-                <label>處室單位</label>
-                <select id="borrowTeacherDept">
-                  <option value="教務處">教務處</option>
-                  <option value="學務處">學務處</option>
-                  <option value="總務處">總務處</option>
-                  <option value="輔導處">輔導處</option>
-                  <option value="人事室">人事室</option>
-                  <option value="會計室">會計室</option>
-                  <option value="其他">其他</option>
-                </select>
-              </div>
-              <div>
-                <label>借用人姓名</label>
-                <input type="text" id="borrowTeacherName" placeholder="請輸入教職員姓名" oninput="syncBorrowName(this.value)">
-              </div>
+            <!-- 教職員專用欄位（預設隱藏） -->
+            <div id="colDept" style="display: none;">
+              <label>處室單位</label>
+              <select id="borrowTeacherDept">
+                <option value="教務處">教務處</option>
+                <option value="學務處">學務處</option>
+                <option value="總務處">總務處</option>
+                <option value="輔導處">輔導處</option>
+                <option value="人事室">人事室</option>
+                <option value="會計室">會計室</option>
+                <option value="其他">其他</option>
+              </select>
+            </div>
+
+            <!-- 姓名欄位（永遠保持可用，共用同一個實體元素） -->
+            <div id="colName">
+              <label>借用人姓名</label>
+              <input type="text" id="borrowName" placeholder="請輸入姓名">
             </div>
           </div>
         </div>
@@ -711,37 +698,37 @@
 
   </div>
 
-  <!-- 身分切換與姓名同步邏輯 -->
+  <!-- 身分切換純粹欄位顯示切換邏輯 -->
   <script>
     function toggleRoleFields() {
       const role = document.querySelector('input[name="borrowRole"]:checked').value;
-      const groupStudent = document.getElementById('groupStudent');
-      const groupTeacher = document.getElementById('groupTeacher');
+      const container = document.getElementById('roleContainer');
+      const colClass = document.getElementById('colClass');
+      const colSeat = document.getElementById('colSeat');
+      const colDept = document.getElementById('colDept');
+      const nameInput = document.getElementById('borrowName');
 
       if (role === 'student') {
-        groupStudent.classList.remove('role-hidden');
-        groupTeacher.classList.add('role-hidden');
+        container.className = 'role-fields-container mode-student';
+        colClass.style.display = 'block';
+        colSeat.style.display = 'block';
+        colDept.style.display = 'none';
+        nameInput.placeholder = '請輸入學生姓名';
       } else {
-        groupStudent.classList.add('role-hidden');
-        groupTeacher.classList.remove('role-hidden');
+        container.className = 'role-fields-container mode-teacher';
+        colClass.style.display = 'none';
+        colSeat.style.display = 'none';
+        colDept.style.display = 'block';
+        nameInput.placeholder = '請輸入教職員姓名';
       }
     }
 
-    // 學生與教職員姓名欄位即時雙向同步
-    function syncBorrowName(val) {
-      const sName = document.getElementById('borrowName');
-      const tName = document.getElementById('borrowTeacherName');
-      if (sName) sName.value = val;
-      if (tName) tName.value = val;
-    }
-
-    // 初始載入時確保狀態正確執行一次
     document.addEventListener('DOMContentLoaded', () => {
       toggleRoleFields();
     });
   </script>
 
-  <!-- 載入邏輯腳本 -->
+  <!-- 載入核心邏輯腳本 -->
   <script src="app.js"></script>
 
   <!-- 歸還掃描結果連動補強：當掃描成功時同步更新 returnItemDisplay 輸入框 -->
