@@ -148,11 +148,16 @@
       font-size: 0.8rem;
       border: 2px solid #cbd5e1;
     }
+
+    /* 鏡像翻轉相機預覽畫面（直覺鏡射） */
     .scanner-box video {
       object-fit: cover !important;
       width: 100% !important;
       height: 100% !important;
+      transform: scaleX(-1) !important;
+      -webkit-transform: scaleX(-1) !important;
     }
+
     .camera-item-right {
       display: flex;
       flex-direction: column;
@@ -214,11 +219,16 @@
 
     /* 教職員：處室單位（左）、借用人姓名（右）強制同一行並排 */
     .teacher-inputs-grid {
-      display: grid !important;
-      grid-template-columns: 1fr 1fr !important;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: 12px;
       width: 100%;
       align-items: center;
+    }
+
+    /* 隱藏專用 class，權重高保證生效 */
+    .role-hidden {
+      display: none !important;
     }
 
     /* 第 3 行：時間、數量、用途說明 同一行 */
@@ -527,8 +537,8 @@
               </div>
             </div>
 
-            <!-- 教職員模式：處室單位（左）、借用人姓名（右）同一行並排 -->
-            <div class="teacher-inputs-grid" id="groupTeacher" style="display: none;">
+            <!-- 教職員模式：處室單位（左）、借用人姓名（右）預設隱藏 -->
+            <div class="teacher-inputs-grid role-hidden" id="groupTeacher">
               <div>
                 <label>處室單位</label>
                 <select id="borrowTeacherDept">
@@ -606,7 +616,6 @@
           <div class="camera-item-right">
             <div>
               <label>歸還物品 (Asset ID / 名稱)</label>
-              <!-- 歸還掃描結果顯示欄位 -->
               <input type="text" id="returnItemDisplay" class="item-result-input" placeholder="← 請開啟鏡頭對準歸還條碼，或點模擬掃碼" readonly>
             </div>
             <div class="scan-ctrl">
@@ -710,11 +719,11 @@
       const groupTeacher = document.getElementById('groupTeacher');
 
       if (role === 'student') {
-        groupStudent.style.display = 'grid';
-        groupTeacher.style.display = 'none';
+        groupStudent.classList.remove('role-hidden');
+        groupTeacher.classList.add('role-hidden');
       } else {
-        groupStudent.style.display = 'none';
-        groupTeacher.style.display = 'grid';
+        groupStudent.classList.add('role-hidden');
+        groupTeacher.classList.remove('role-hidden');
       }
     }
 
@@ -725,6 +734,11 @@
       if (sName) sName.value = val;
       if (tName) tName.value = val;
     }
+
+    // 初始載入時確保狀態正確執行一次
+    document.addEventListener('DOMContentLoaded', () => {
+      toggleRoleFields();
+    });
   </script>
 
   <!-- 載入邏輯腳本 -->
