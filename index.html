@@ -123,7 +123,7 @@
       box-shadow: 0 2px 6px rgba(0,0,0,0.05);
     }
 
-    /* ===== 第一行：左側相機 + 右側物品名稱 ===== */
+    /* ===== 第 1 行：左側相機 + 右側物品名稱 ===== */
     .row-camera-item {
       display: grid;
       grid-template-columns: 140px 1fr;
@@ -163,10 +163,10 @@
       gap: 6px;
     }
 
-    /* ===== 第二行：左側身分切換 + 右側借用人資料 ===== */
+    /* ===== 第 2 行：左側身分切換 + 右側借用人資料 ===== */
     .row-role-info {
       display: grid;
-      grid-template-columns: 200px 1fr;
+      grid-template-columns: 180px 1fr;
       gap: 14px;
       align-items: center;
       margin-bottom: 10px;
@@ -205,12 +205,30 @@
       gap: 10px;
     }
 
-    /* 第三行：時間、數量、用途 */
+    /* 第 3 行：時間、數量、用途 */
     .grid-row-3-equal {
       display: grid;
       grid-template-columns: 1.2fr 0.7fr 2.1fr;
       gap: 10px;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
+    }
+
+    /* ===== 第 4 行：左半簽名、右半確認按鈕 ===== */
+    .row-sign-submit {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      align-items: stretch;
+      margin-top: 4px;
+    }
+    .sign-col {
+      display: flex;
+      flex-direction: column;
+    }
+    .submit-col {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
     }
 
     label {
@@ -245,12 +263,12 @@
     .btn-action { background: #2563eb; }
     .btn-secondary { background: #4b5563; }
 
-    /* 簽名框（高 105px） */
+    /* 簽名框（高 110px） */
     .sign-box {
       border: 1.5px dashed #9ca3af;
       background: #fff;
       border-radius: 6px;
-      height: 105px;
+      height: 110px;
       position: relative;
       touch-action: none;
       margin-top: 2px;
@@ -296,26 +314,31 @@
       color: #1e3a8a;
     }
 
-    .notice {
-      padding: 6px 10px;
-      font-size: 0.72rem;
-      color: #6b7280;
+    .notice-box {
       background: #f9fafb;
-      border-radius: 4px;
-      margin-top: 6px;
-      line-height: 1.25;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 0.73rem;
+      color: #6b7280;
+      line-height: 1.35;
+      margin-bottom: 8px;
     }
+
     .btn-submit {
       width: 100%;
-      margin-top: 8px;
-      padding: 10px;
+      height: 52px;
       background: #16a34a;
       color: #fff;
       border: none;
-      border-radius: 6px;
-      font-size: 0.98rem;
+      border-radius: 8px;
+      font-size: 1.05rem;
       font-weight: 700;
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     .btn-submit.btn-blue {
       background: #2563eb;
@@ -472,8 +495,8 @@
           </div>
 
           <!-- 右側身分動態資料容器 -->
-          <div id="roleDataContainer">
-            <!-- 學生模式：班級、姓名、座號 同一行 -->
+          <div>
+            <!-- 學生模式：班級、座號、借用人姓名 同一行 -->
             <div class="student-inputs-grid" id="groupStudent">
               <div>
                 <label>班級</label>
@@ -485,11 +508,11 @@
               </div>
               <div>
                 <label>借用人姓名</label>
-                <input type="text" id="borrowName" placeholder="請輸入姓名">
+                <input type="text" id="borrowName" placeholder="請輸入姓名" oninput="syncBorrowName(this.value)">
               </div>
             </div>
 
-            <!-- 教職員模式：處室、借用人 同一行 -->
+            <!-- 教職員模式：處室單位、借用人姓名 同一行 -->
             <div class="teacher-inputs-grid" id="groupTeacher" style="display: none;">
               <div>
                 <label>處室單位</label>
@@ -503,8 +526,9 @@
                   <option value="其他">其他</option>
                 </select>
               </div>
-              <div id="teacherNameSlot">
-                <!-- 姓名欄位會由 JS 在切換時自動移入此處 -->
+              <div>
+                <label>借用人姓名</label>
+                <input type="text" id="borrowTeacherName" placeholder="請輸入姓名" oninput="syncBorrowName(this.value)">
               </div>
             </div>
           </div>
@@ -526,23 +550,30 @@
           </div>
         </div>
 
-        <!-- 第 4 行：借用人簽名 -->
-        <div class="form-group">
-          <label>借用人簽名</label>
-          <div class="sign-box">
-            <canvas id="padBorrow"></canvas>
+        <!-- 第 4 行：左半借用人簽名、右半確認借出按鈕 -->
+        <div class="row-sign-submit">
+          <!-- 左半邊：簽名板 -->
+          <div class="sign-col">
+            <label>借用人簽名</label>
+            <div class="sign-box">
+              <canvas id="padBorrow"></canvas>
+            </div>
+            <div class="sign-meta">
+              <span>請借用人於上方框內手寫簽名</span>
+              <button type="button" class="btn-clear" onclick="padBorrow.clear()">清除重簽</button>
+            </div>
           </div>
-          <div class="sign-meta">
-            <span>請借用人於上方框內簽名</span>
-            <button type="button" class="btn-clear" onclick="padBorrow.clear()">清除重簽</button>
+
+          <!-- 右半邊：注意事項與確認登記按鈕 -->
+          <div class="submit-col">
+            <div class="notice-box">
+              ※ 請妥善保管借出物品，用畢後請儘速歸還。<br>
+              ※ 如有遺失或損壞需擔負損害賠償責任。
+            </div>
+            <button class="btn-submit btn-blue" onclick="submitBorrow()">確認借出登記</button>
           </div>
         </div>
 
-        <div class="notice">
-          ※ 請妥善保管借出物品，用畢後請儘速歸還。損壞或遺失需負損害賠償責任。
-        </div>
-
-        <button class="btn-submit btn-blue" onclick="submitBorrow()">確認借出登記</button>
       </div>
     </section>
 
@@ -590,18 +621,28 @@
           </div>
         </div>
 
-        <div class="form-group">
-          <label>歸還人簽名</label>
-          <div class="sign-box">
-            <canvas id="padReturn"></canvas>
+        <!-- 左半歸還人簽名、右半確認歸還按鈕 -->
+        <div class="row-sign-submit">
+          <div class="sign-col">
+            <label>歸還人簽名</label>
+            <div class="sign-box">
+              <canvas id="padReturn"></canvas>
+            </div>
+            <div class="sign-meta">
+              <span>請歸還人於上方框內手寫簽名</span>
+              <button type="button" class="btn-clear" onclick="padReturn.clear()">清除重簽</button>
+            </div>
           </div>
-          <div class="sign-meta">
-            <span>請歸還人於上方框內簽名</span>
-            <button type="button" class="btn-clear" onclick="padReturn.clear()">清除重簽</button>
+
+          <div class="submit-col">
+            <div class="notice-box">
+              ※ 請管理員確實點驗歸還品項與數量是否無誤。<br>
+              ※ 點收無誤後即可結案。
+            </div>
+            <button class="btn-submit" onclick="submitReturn()">確認歸還結案</button>
           </div>
         </div>
 
-        <button class="btn-submit" onclick="submitReturn()">確認歸還結案</button>
       </div>
     </section>
 
@@ -641,24 +682,26 @@
 
   </div>
 
-  <!-- 身分切換動態調整 DOM 排版 -->
+  <!-- 身分切換與姓名同步邏輯 -->
   <script>
     function toggleRoleFields() {
       const role = document.querySelector('input[name="borrowRole"]:checked').value;
       const groupStudent = document.getElementById('groupStudent');
       const groupTeacher = document.getElementById('groupTeacher');
-      const nameInputBlock = document.getElementById('borrowName').parentElement;
-      const teacherSlot = document.getElementById('teacherNameSlot');
 
       if (role === 'student') {
         groupStudent.style.display = 'grid';
         groupTeacher.style.display = 'none';
-        groupStudent.appendChild(nameInputBlock);
       } else {
         groupStudent.style.display = 'none';
         groupTeacher.style.display = 'grid';
-        teacherSlot.appendChild(nameInputBlock);
       }
+    }
+
+    // 學生與教職員姓名欄位即時同步，確保 app.js 抓取時一定有值
+    function syncBorrowName(val) {
+      document.getElementById('borrowName').value = val;
+      document.getElementById('borrowTeacherName').value = val;
     }
   </script>
 
