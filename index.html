@@ -179,7 +179,7 @@
       border: 1.5px solid #93c5fd !important;
     }
 
-    /* ===== 第 2 行：左側身分選單 + 右側填寫區 ===== */
+    /* ===== 第 2 行：左側身分選單 + 右側統一填寫區 ===== */
     .row-role-info {
       display: grid;
       grid-template-columns: 180px 1fr;
@@ -209,19 +209,19 @@
       height: 18px;
     }
 
-    /* 動態網格容器：根據身分呈現欄位 */
+    /* 動態網格容器：根據身分切換排版 */
     .role-fields-container {
       display: grid;
       gap: 10px;
       width: 100%;
     }
-    /* 學生時：班級 (1fr) + 座號 (1fr) + 借用人姓名 (1.2fr) */
+    /* 學生模式：班級(1fr) + 座號(1fr) + 姓名(1.2fr) */
     .role-fields-container.mode-student {
-      grid-template-columns: 1fr 1fr 1.2fr;
+      grid-template-columns: 1fr 1fr 1.2fr !important;
     }
-    /* 教職員時：處室單位 (1fr) + 借用人姓名 (1fr) */
+    /* 教職員模式：處室單位(1fr) + 姓名(1fr) */
     .role-fields-container.mode-teacher {
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr !important;
     }
 
     /* 第 3 行：時間、數量、用途說明 同一行 */
@@ -512,7 +512,7 @@
             </div>
           </div>
 
-          <!-- 右側身分動態資料容器（共用姓名欄位，徹底杜絕輸入鎖死） -->
+          <!-- 右側身分動態資料容器 -->
           <div class="role-fields-container mode-student" id="roleContainer">
             <!-- 學生專用欄位 -->
             <div id="colClass">
@@ -524,7 +524,7 @@
               <input type="number" id="borrowStudentSeat" placeholder="例：08" min="1">
             </div>
 
-            <!-- 教職員專用欄位（預設隱藏） -->
+            <!-- 教職員專用欄位（處室單位下拉選單） -->
             <div id="colDept" style="display: none;">
               <label>處室單位</label>
               <select id="borrowTeacherDept">
@@ -538,7 +538,7 @@
               </select>
             </div>
 
-            <!-- 姓名欄位（永遠保持可用，共用同一個實體元素） -->
+            <!-- 姓名欄位（共用） -->
             <div id="colName">
               <label>借用人姓名</label>
               <input type="text" id="borrowName" placeholder="請輸入姓名">
@@ -698,15 +698,22 @@
 
   </div>
 
-  <!-- 身分切換純粹欄位顯示切換邏輯 -->
+  <!-- 載入核心邏輯腳本 -->
+  <script src="app.js"></script>
+
+  <!-- 強制覆蓋全域切換邏輯，確保選單切換 100% 正確生效 -->
   <script>
-    function toggleRoleFields() {
-      const role = document.querySelector('input[name="borrowRole"]:checked').value;
+    window.toggleRoleFields = function() {
+      const roleEl = document.querySelector('input[name="borrowRole"]:checked');
+      if (!roleEl) return;
+      const role = roleEl.value;
       const container = document.getElementById('roleContainer');
       const colClass = document.getElementById('colClass');
       const colSeat = document.getElementById('colSeat');
       const colDept = document.getElementById('colDept');
       const nameInput = document.getElementById('borrowName');
+
+      if (!container || !colClass || !colSeat || !colDept || !nameInput) return;
 
       if (role === 'student') {
         container.className = 'role-fields-container mode-student';
@@ -718,21 +725,17 @@
         container.className = 'role-fields-container mode-teacher';
         colClass.style.display = 'none';
         colSeat.style.display = 'none';
-        colDept.style.display = 'block';
+        colDept.style.display = 'block'; // 顯示處室單位下拉選單
         nameInput.placeholder = '請輸入教職員姓名';
       }
-    }
+    };
 
+    // 頁面初次載入執行
     document.addEventListener('DOMContentLoaded', () => {
-      toggleRoleFields();
+      window.toggleRoleFields();
     });
-  </script>
 
-  <!-- 載入核心邏輯腳本 -->
-  <script src="app.js"></script>
-
-  <!-- 歸還掃描結果連動補強：當掃描成功時同步更新 returnItemDisplay 輸入框 -->
-  <script>
+    // 歸還掃描結果連動補強：當掃描成功時同步更新 returnItemDisplay 輸入框
     const origHandleScan = window.handleScanResult;
     window.handleScanResult = function(decodedText, mode) {
       if (typeof origHandleScan === 'function') {
