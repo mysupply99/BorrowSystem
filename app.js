@@ -7,7 +7,17 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 
 
-const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let dbClient = null;
+try {
+  if (window.supabase && typeof window.supabase.createClient === "function") {
+    dbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log("Supabase Client 初始化成功");
+  } else {
+    console.warn("未偵測到 Supabase SDK");
+  }
+} catch (e) {
+  console.error("Supabase 初始化異常:", e);
+}
 
 // === 2. Web Audio API 蜂鳴聲 (1800Hz) ===
 class Beeper {
@@ -22,7 +32,7 @@ class Beeper {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       this.ctx = new AudioContext();
     }
-    if (this.ctx.state === "suspended") {
+    if (this.ctx && this.ctx.state === "suspended") {
       this.ctx.resume();
     }
   }
@@ -33,80 +43,43 @@ class Beeper {
   }
 
   beep() {
-    this.init();
-    if (this.volume <= 0) return;
+    try {
+      this.init();
+      if (!this.ctx || this.volume <= 0) return;
 
-    const osc = this.ctx.createOscillator();
-    const gainNode = this.ctx.createGain();
+      const osc = this.ctx.createOscillator();
+      const gainNode = this.ctx.createGain();
 
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(1800, this.ctx.currentTime); // 1800Hz 條碼讀取機頻率
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(1800, this.ctx.currentTime);
 
-    gainNode.gain.setValueAtTime(this.volume, this.ctx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.08);
+      gainNode.gain.setValueAtTime(this.volume, this.ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.08);
 
-    osc.connect(gainNode);
-    gainNode.connect(this.ctx.destination);
+      osc.connect(gainNode);
+      gainNode.connect(this.ctx.destination);
 
-    osc.start();
-    osc.stop(this.ctx.currentTime + 0.08);
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.08);
+    } catch (err) {
+      console.warn("蜂鳴聲播放略過:", err);
+    }
   }
 }
 
 const beeper = new Beeper();
 
-// === 3. 系統狀態變數 ===
-let currentRole = "student"; // "student" | "staff"
-let activeTab = "borrow";    // "borrow" | "return"
+// === 3. 狀態變數 ===
+let currentRole = "student";
+let activeTab = "borrow";
 let borrowPad = null;
 let returnPad = null;
 let html5QrCode = null;
 let selectedReturnRecordId = null;
 
-// === 4. DOM 快取 ===
-const el = {
-  beepVol: document.getElementById("beep-volume"),
-  navBorrow: document.getElementById("nav-borrow"),
-  navReturn: document.getElementById("nav-return"),
-  pageBorrow: document.getElementById("page-borrow"),
-  pageReturn: document.getElementById("page-return"),
-
-  btnStudent: document.getElementById("role-btn-student"),
-  btnStaff: document.getElementById("role-btn-staff"),
-  contStudent: document.getElementById("container-student"),
-  contStaff: document.getElementById("container-staff"),
-
-  canvasBorrow: document.getElementById("canvas-borrow-sign"),
-  btnClearBorrowSign: document.getElementById("btn-clear-signature"),
-  btnSubmitBorrow: document.getElementById("btn-submit-borrow"),
-
-  itemCode: document.getElementById("borrow-item-code"),
-  itemName: document.getElementById("borrow-item-name"),
-  itemQty: document.getElementById("borrow-quantity"),
-  borrowClass: document.getElementById("borrow-class"),
-  borrowSeat: document.getElementById("borrow-seat"),
-  borrowNameStudent: document.getElementById("borrow-name-student"),
-  borrowDept: document.getElementById("borrow-dept"),
-  borrowNameStaff: document.getElementById("borrow-name-staff"),
-  borrowPurpose: document.getElementById("borrow-purpose"),
-
-  unreturnedTbody: document.getElementById("unreturned-tbody"),
-  btnRefreshList: document.getElementById("btn-refresh-list"),
-
-  modalReturn: document.getElementById("modal-return"),
-  modalItemInfo: document.getElementById("modal-item-info"),
-  returnPersonName: document.getElementById("return-person-name"),
-  returnNotes: document.getElementById("return-notes"),
-  canvasReturn: document.getElementById("canvas-return-sign"),
-  btnClearReturnSign: document.getElementById("btn-clear-return-signature"),
-  btnCancelReturn: document.getElementById("btn-cancel-return"),
-  btnCloseModal: document.getElementById("btn-close-modal"),
-  btnConfirmReturn: document.getElementById("btn-confirm-return")
-};
-
-// === 5. iPad Canvas Retina 解析度校正 ===
+// === 4. 高解析度 Canvas 初始化 ===
 function initSignatureCanvas(canvas, currentPad) {
-  if (!canvas) return null;
+  if (!canvas || typeof SignaturePad === "undefined") return currentPad;
   const ratio = Math.max(window.devicePixelRatio || 1, 1);
   const rect = canvas.getBoundingClientRect();
 
@@ -128,92 +101,112 @@ function initSignatureCanvas(canvas, currentPad) {
   }
 }
 
-// === 6. 條碼掃描模組 (15 FPS / 85% 視窗) ===
+// === 5. 掃碼相機模組 (延遲安全加載) ===
 function initQrScanner() {
-  const qrElement = document.getElementById("qr-reader");
-  if (!qrElement) return;
+  const qrBox = document.getElementById("qr-reader");
+  if (!qrBox || typeof Html5Qrcode === "undefined") return;
 
-  html5QrCode = new Html5Qrcode("qr-reader");
-  const config = {
-    fps: 15,
-    qrbox: (viewfinderWidth, viewfinderHeight) => {
-      const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.85);
-      return { width: edge, height: edge };
-    },
-    aspectRatio: 1.777778
-  };
+  try {
+    html5QrCode = new Html5Qrcode("qr-reader");
+    const config = {
+      fps: 15,
+      qrbox: (viewfinderWidth, viewfinderHeight) => {
+        const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.85);
+        return { width: edge, height: edge };
+      },
+      aspectRatio: 1.777778
+    };
 
-  html5QrCode.start(
-    { facingMode: "environment" },
-    config,
-    (decodedText) => {
-      beeper.beep();
-      if (el.itemCode) el.itemCode.value = decodedText;
-    },
-    (err) => {
-      // 掃描幀無條碼略過
-    }
-  ).catch(err => {
-    console.warn("鏡頭未啟動或未給予權限:", err);
-  });
-}
-
-// === 7. 身分切換 (學生 vs 教職員) ===
-function switchRole(role) {
-  currentRole = role;
-  if (role === "student") {
-    el.btnStudent.classList.add("active");
-    el.btnStaff.classList.remove("active");
-    el.contStudent.classList.remove("is-hidden");
-    el.contStaff.classList.add("is-hidden");
-  } else {
-    el.btnStaff.classList.add("active");
-    el.btnStudent.classList.remove("active");
-    el.contStaff.classList.remove("is-hidden");
-    el.contStudent.classList.add("is-hidden");
+    html5QrCode.start(
+      { facingMode: "environment" },
+      config,
+      (decodedText) => {
+        beeper.beep();
+        const codeInput = document.getElementById("borrow-item-code");
+        if (codeInput) codeInput.value = decodedText;
+      },
+      () => {}
+    ).catch(err => {
+      console.log("鏡頭未啟動或使用者未授權:", err);
+      qrBox.innerHTML = `<div style="color:#94a3b8; font-size:12px; display:flex; height:100%; align-items:center; justify-content:center;">相機已就緒 (手動輸入代碼亦可)</div>`;
+    });
+  } catch (err) {
+    console.warn("掃描器啟動例外:", err);
   }
 }
 
-// === 8. 分頁切換 (借用登記 vs 歸還清單) ===
+// === 6. 身分切換 (學生 vs 教職員) ===
+function switchRole(role) {
+  currentRole = role;
+  const btnStudent = document.getElementById("role-btn-student");
+  const btnStaff = document.getElementById("role-btn-staff");
+  const contStudent = document.getElementById("container-student");
+  const contStaff = document.getElementById("container-staff");
+
+  if (role === "student") {
+    btnStudent?.classList.add("active");
+    btnStaff?.classList.remove("active");
+    contStudent?.classList.remove("is-hidden");
+    contStaff?.classList.add("is-hidden");
+  } else {
+    btnStaff?.classList.add("active");
+    btnStudent?.classList.remove("active");
+    contStaff?.classList.remove("is-hidden");
+    contStudent?.classList.add("is-hidden");
+  }
+}
+
+// === 7. 分頁切換 (借用登記 vs 歸還清單) ===
 function switchTab(tab) {
   activeTab = tab;
+  const navBorrow = document.getElementById("nav-borrow");
+  const navReturn = document.getElementById("nav-return");
+  const pageBorrow = document.getElementById("page-borrow");
+  const pageReturn = document.getElementById("page-return");
+
   if (tab === "borrow") {
-    el.navBorrow.classList.add("active");
-    el.navReturn.classList.remove("active");
-    el.pageBorrow.classList.remove("is-hidden");
-    el.pageReturn.classList.add("is-hidden");
+    navBorrow?.classList.add("active");
+    navReturn?.classList.remove("active");
+    pageBorrow?.classList.remove("is-hidden");
+    pageReturn?.classList.add("is-hidden");
 
     setTimeout(() => {
-      borrowPad = initSignatureCanvas(el.canvasBorrow, borrowPad);
+      const c = document.getElementById("canvas-borrow-sign");
+      borrowPad = initSignatureCanvas(c, borrowPad);
     }, 150);
   } else {
-    el.navReturn.classList.add("active");
-    el.navBorrow.classList.remove("active");
-    el.pageReturn.classList.remove("is-hidden");
-    el.pageBorrow.classList.add("is-hidden");
+    navReturn?.classList.add("active");
+    navBorrow?.classList.remove("active");
+    pageReturn?.classList.remove("is-hidden");
+    pageBorrow?.classList.add("is-hidden");
 
     fetchUnreturnedList();
   }
 }
 
-// === 9. 雲端資料庫操作 (使用 supabaseClient) ===
+// === 8. 借出登記送出 ===
 async function submitBorrowRecord() {
-  const itemCode = el.itemCode.value.trim();
-  const itemName = el.itemName.value.trim();
-  const quantity = parseInt(el.itemQty.value, 10) || 1;
-  const purpose = el.borrowPurpose.value.trim();
+  if (!dbClient) {
+    alert("尚未設定 Supabase 連線資訊！");
+    return;
+  }
+
+  const itemCode = document.getElementById("borrow-item-code")?.value.trim() || "";
+  const itemName = document.getElementById("borrow-item-name")?.value.trim() || "";
+  const quantity = parseInt(document.getElementById("borrow-quantity")?.value, 10) || 1;
+  const purpose = document.getElementById("borrow-purpose")?.value.trim() || "";
 
   let borrowerName = "";
   let departmentOrClass = "";
 
   if (currentRole === "student") {
-    borrowerName = el.borrowNameStudent.value.trim();
-    const c = el.borrowClass.value.trim();
-    const s = el.borrowSeat.value.trim();
+    borrowerName = document.getElementById("borrow-name-student")?.value.trim() || "";
+    const c = document.getElementById("borrow-class")?.value.trim() || "";
+    const s = document.getElementById("borrow-seat")?.value.trim() || "";
     departmentOrClass = `${c}班 ${s}號`.trim();
   } else {
-    borrowerName = el.borrowNameStaff.value.trim();
-    departmentOrClass = el.borrowDept.value;
+    borrowerName = document.getElementById("borrow-name-staff")?.value.trim() || "";
+    departmentOrClass = document.getElementById("borrow-dept")?.value || "";
   }
 
   if (!itemCode || !borrowerName) {
@@ -227,11 +220,13 @@ async function submitBorrowRecord() {
   }
 
   const signData = borrowPad.toDataURL("image/png");
+  const btn = document.getElementById("btn-submit-borrow");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = "寫入資料庫中...";
+  }
 
-  el.btnSubmitBorrow.disabled = true;
-  el.btnSubmitBorrow.innerText = "寫入資料庫中...";
-
-  const { error } = await supabaseClient.from("borrow_records").insert([
+  const { error } = await dbClient.from("borrow_records").insert([
     {
       item_code: itemCode,
       item_name: itemName,
@@ -246,32 +241,40 @@ async function submitBorrowRecord() {
     }
   ]);
 
-  el.btnSubmitBorrow.disabled = false;
-  el.btnSubmitBorrow.innerText = "送出借用登記";
+  if (btn) {
+    btn.disabled = false;
+    btn.innerText = "送出借用登記";
+  }
 
   if (error) {
     console.error("Supabase 寫入錯誤:", error);
-    alert("登記失敗，請檢查網路連線或稍後再試！");
+    alert("登記失敗，請檢查網路連線！");
   } else {
     alert("借用登記成功！");
-    el.itemCode.value = "";
-    el.itemName.value = "";
-    el.itemQty.value = "1";
-    el.borrowClass.value = "";
-    el.borrowSeat.value = "";
-    el.borrowNameStudent.value = "";
-    el.borrowNameStaff.value = "";
-    el.borrowPurpose.value = "";
+    document.getElementById("borrow-item-code").value = "";
+    document.getElementById("borrow-item-name").value = "";
+    document.getElementById("borrow-quantity").value = "1";
+    document.getElementById("borrow-class").value = "";
+    document.getElementById("borrow-seat").value = "";
+    document.getElementById("borrow-name-student").value = "";
+    document.getElementById("borrow-name-staff").value = "";
+    document.getElementById("borrow-purpose").value = "";
     borrowPad.clear();
   }
 }
 
-// 取得未歸還物品清單
+// === 9. 未歸還清單與歸還作業 ===
 async function fetchUnreturnedList() {
-  if (!el.unreturnedTbody) return;
-  el.unreturnedTbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 24px; color: #94a3b8;">載入中...</td></tr>`;
+  const tbody = document.getElementById("unreturned-tbody");
+  if (!tbody) return;
+  tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#94a3b8;">載入中...</td></tr>`;
 
-  const { data, error } = await supabaseClient
+  if (!dbClient) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#ef4444;">未配置 Supabase 金鑰</td></tr>`;
+    return;
+  }
+
+  const { data, error } = await dbClient
     .from("borrow_records")
     .select("*")
     .eq("is_returned", false)
@@ -279,17 +282,17 @@ async function fetchUnreturnedList() {
 
   if (error) {
     console.error("清單讀取失敗:", error);
-    el.unreturnedTbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 24px; color: #ef4444;">無法載入資料表</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#ef4444;">讀取失敗</td></tr>`;
     return;
   }
 
   if (!data || data.length === 0) {
-    el.unreturnedTbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 24px; color: #94a3b8;">目前無借出中的物品</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#94a3b8;">目前無借出中的物品</td></tr>`;
     return;
   }
 
-  el.unreturnedTbody.innerHTML = data.map(row => {
-    const borrowDate = new Date(row.borrow_time).toLocaleDateString("zh-TW", {
+  tbody.innerHTML = data.map(row => {
+    const d = new Date(row.borrow_time).toLocaleDateString("zh-TW", {
       month: "numeric",
       day: "numeric",
       hour: "2-digit",
@@ -298,13 +301,13 @@ async function fetchUnreturnedList() {
 
     return `
       <tr>
-        <td style="font-family: monospace; font-size: 0.75rem; color: #64748b;">${borrowDate}</td>
+        <td style="font-family: monospace; font-size: 0.75rem; color: #64748b;">${d}</td>
         <td><b>${row.item_name || "無品名"}</b> <span style="font-size: 0.75rem; color: #94a3b8;">(${row.item_code})</span></td>
         <td>${row.borrower_name}</td>
         <td style="font-size: 0.75rem; color: #64748b;">${row.department_class || "-"}</td>
         <td><b>${row.quantity}</b></td>
         <td style="text-align: right;">
-          <button onclick="openReturnModal('${row.id}', '${row.item_name || row.item_code}', '${row.borrower_name}')" class="btn-sm" style="background-color: #059669; color: white; border: none; cursor: pointer;">
+          <button onclick="openReturnModal('${row.id}', '${row.item_name || row.item_code}', '${row.borrower_name}')" class="btn-sm" style="background-color: #059669; color: white; border: none;">
             辦理歸還
           </button>
         </td>
@@ -313,31 +316,36 @@ async function fetchUnreturnedList() {
   }).join("");
 }
 
-// 歸還彈窗控制
 window.openReturnModal = function(id, itemName, borrowerName) {
   selectedReturnRecordId = id;
-  el.modalItemInfo.innerHTML = `<b>品名/條碼:</b> ${itemName} ｜ <b>借用人:</b> ${borrowerName}`;
-  el.returnPersonName.value = borrowerName;
-  el.returnNotes.value = "";
-  el.modalReturn.classList.remove("is-hidden");
+  const info = document.getElementById("modal-item-info");
+  if (info) info.innerHTML = `<b>品名/條碼:</b> ${itemName} ｜ <b>借用人:</b> ${borrowerName}`;
+  
+  const pName = document.getElementById("return-person-name");
+  if (pName) pName.value = borrowerName;
+  
+  const notes = document.getElementById("return-notes");
+  if (notes) notes.value = "";
+
+  document.getElementById("modal-return")?.classList.remove("is-hidden");
 
   setTimeout(() => {
-    returnPad = initSignatureCanvas(el.canvasReturn, returnPad);
+    const c = document.getElementById("canvas-return-sign");
+    returnPad = initSignatureCanvas(c, returnPad);
   }, 150);
 };
 
 function closeReturnModal() {
-  el.modalReturn.classList.add("is-hidden");
+  document.getElementById("modal-return")?.classList.add("is-hidden");
   selectedReturnRecordId = null;
   if (returnPad) returnPad.clear();
 }
 
-// 提交歸還
 async function submitReturnRecord() {
-  if (!selectedReturnRecordId) return;
+  if (!selectedReturnRecordId || !dbClient) return;
 
-  const returnName = el.returnPersonName.value.trim();
-  const notes = el.returnNotes.value.trim();
+  const returnName = document.getElementById("return-person-name")?.value.trim() || "";
+  const notes = document.getElementById("return-notes")?.value.trim() || "";
 
   if (!returnName) {
     alert("請輸入歸還人姓名！");
@@ -350,10 +358,13 @@ async function submitReturnRecord() {
   }
 
   const signData = returnPad.toDataURL("image/png");
-  el.btnConfirmReturn.disabled = true;
-  el.btnConfirmReturn.innerText = "存檔中...";
+  const btn = document.getElementById("btn-confirm-return");
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = "存檔中...";
+  }
 
-  const { error } = await supabaseClient
+  const { error } = await dbClient
     .from("borrow_records")
     .update({
       is_returned: true,
@@ -364,11 +375,13 @@ async function submitReturnRecord() {
     })
     .eq("id", selectedReturnRecordId);
 
-  el.btnConfirmReturn.disabled = false;
-  el.btnConfirmReturn.innerText = "確認歸還存檔";
+  if (btn) {
+    btn.disabled = false;
+    btn.innerText = "確認歸還存檔";
+  }
 
   if (error) {
-    console.error("歸還更新失敗:", error);
+    console.error("歸還失敗:", error);
     alert("歸還失敗，請檢查網路連線！");
   } else {
     alert("歸還手續完成！");
@@ -377,43 +390,50 @@ async function submitReturnRecord() {
   }
 }
 
-// === 10. 事件監聽綁定 ===
-window.addEventListener("DOMContentLoaded", () => {
-  // 音量初始
-  if (el.beepVol) {
-    el.beepVol.value = beeper.volume;
-    el.beepVol.addEventListener("input", (e) => beeper.setVolume(e.target.value));
+// === 10. 綁定監聽器 (獨立掛載，互不影響) ===
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("DOM 載入完成，正在綁定事件...");
+
+  // 1. 提示音量
+  const beepVol = document.getElementById("beep-volume");
+  if (beepVol) {
+    beepVol.value = beeper.volume;
+    beepVol.addEventListener("input", (e) => beeper.setVolume(e.target.value));
   }
 
-  // 身分切換
-  if (el.btnStudent) el.btnStudent.addEventListener("click", () => switchRole("student"));
-  if (el.btnStaff) el.btnStaff.addEventListener("click", () => switchRole("staff"));
+  // 2. 身分切換 (學生 / 教職員)
+  document.getElementById("role-btn-student")?.addEventListener("click", () => switchRole("student"));
+  document.getElementById("role-btn-staff")?.addEventListener("click", () => switchRole("staff"));
 
-  // 分頁切換
-  if (el.navBorrow) el.navBorrow.addEventListener("click", () => switchTab("borrow"));
-  if (el.navReturn) el.navReturn.addEventListener("click", () => switchTab("return"));
+  // 3. 分頁切換 (借用 / 歸還)
+  document.getElementById("nav-borrow")?.addEventListener("click", () => switchTab("borrow"));
+  document.getElementById("nav-return")?.addEventListener("click", () => switchTab("return"));
 
-  // 簽名板清除按鈕
-  if (el.btnClearBorrowSign) el.btnClearBorrowSign.addEventListener("click", () => borrowPad && borrowPad.clear());
-  if (el.btnClearReturnSign) el.btnClearReturnSign.addEventListener("click", () => returnPad && returnPad.clear());
+  // 4. 簽名板按鈕
+  document.getElementById("btn-clear-signature")?.addEventListener("click", () => borrowPad && borrowPad.clear());
+  document.getElementById("btn-clear-return-signature")?.addEventListener("click", () => returnPad && returnPad.clear());
 
-  // 表單送出與清單更新
-  if (el.btnSubmitBorrow) el.btnSubmitBorrow.addEventListener("click", submitBorrowRecord);
-  if (el.btnRefreshList) el.btnRefreshList.addEventListener("click", fetchUnreturnedList);
-  if (el.btnCancelReturn) el.btnCancelReturn.addEventListener("click", closeReturnModal);
-  if (el.btnCloseModal) el.btnCloseModal.addEventListener("click", closeReturnModal);
-  if (el.btnConfirmReturn) el.btnConfirmReturn.addEventListener("click", submitReturnRecord);
+  // 5. 表單按鈕
+  document.getElementById("btn-submit-borrow")?.addEventListener("click", submitBorrowRecord);
+  document.getElementById("btn-refresh-list")?.addEventListener("click", fetchUnreturnedList);
+  document.getElementById("btn-cancel-return")?.addEventListener("click", closeReturnModal);
+  document.getElementById("btn-close-modal")?.addEventListener("click", closeReturnModal);
+  document.getElementById("btn-confirm-return")?.addEventListener("click", submitReturnRecord);
 
-  // 初始化簽名板與鏡頭掃描
+  // 6. 延遲掛載簽名板與掃描器
   setTimeout(() => {
-    borrowPad = initSignatureCanvas(el.canvasBorrow);
+    const c = document.getElementById("canvas-borrow-sign");
+    borrowPad = initSignatureCanvas(c);
     initQrScanner();
   }, 200);
 
-  // 螢幕旋轉/調整尺寸時適配
+  // 7. 螢幕旋轉適配
   window.addEventListener("resize", () => {
     if (activeTab === "borrow") {
-      borrowPad = initSignatureCanvas(el.canvasBorrow, borrowPad);
+      const c = document.getElementById("canvas-borrow-sign");
+      borrowPad = initSignatureCanvas(c, borrowPad);
     }
   });
+
+  console.log("所有元件事件綁定完成！");
 });
