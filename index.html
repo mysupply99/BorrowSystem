@@ -149,13 +149,11 @@
       border: 2px solid #cbd5e1;
     }
 
-    /* 鏡像翻轉相機預覽畫面（直覺鏡射） */
+    /* 後鏡頭需使用標準正向預覽，移除 scaleX 鏡像 */
     .scanner-box video {
       object-fit: cover !important;
       width: 100% !important;
       height: 100% !important;
-      transform: scaleX(-1) !important;
-      -webkit-transform: scaleX(-1) !important;
     }
 
     .camera-item-right {
@@ -179,7 +177,7 @@
       border: 1.5px solid #93c5fd !important;
     }
 
-    /* ===== 第 2 行：左側身分選單 + 右側統一填寫區 ===== */
+    /* ===== 第 2 行：左側身分選單 + 右側填寫區 ===== */
     .row-role-info {
       display: grid;
       grid-template-columns: 180px 1fr;
@@ -209,19 +207,21 @@
       height: 18px;
     }
 
-    /* 動態網格容器：根據身分切換排版 */
-    .role-fields-container {
+    /* 學生：班級、座號、姓名 同一行 */
+    .student-inputs-grid {
       display: grid;
+      grid-template-columns: 1fr 1fr 1.2fr;
       gap: 10px;
       width: 100%;
     }
-    /* 學生模式：班級(1fr) + 座號(1fr) + 姓名(1.2fr) */
-    .role-fields-container.mode-student {
-      grid-template-columns: 1fr 1fr 1.2fr !important;
-    }
-    /* 教職員模式：處室單位(1fr) + 姓名(1fr) */
-    .role-fields-container.mode-teacher {
+
+    /* 教職員：處室單位（左）、借用人姓名（右）強制同一行並排 */
+    .teacher-inputs-grid {
+      display: grid !important;
       grid-template-columns: 1fr 1fr !important;
+      gap: 12px;
+      width: 100%;
+      align-items: center;
     }
 
     /* 第 3 行：時間、數量、用途說明 同一行 */
@@ -490,13 +490,13 @@
               <input type="text" id="borrowItemId" class="item-result-input" placeholder="← 請點開啟鏡頭對準條碼，或點模擬掃碼" readonly>
             </div>
             <div class="scan-ctrl">
-              <button type="button" class="btn-action" id="btnCamBorrow" onclick="toggleCamera('borrow')">開啟前鏡頭掃碼</button>
+              <button type="button" class="btn-action" id="btnCamBorrow" onclick="toggleCamera('borrow')">開啟後鏡頭掃碼</button>
               <button type="button" class="btn-secondary" onclick="mockScanBorrow('K01')">模擬掃碼 [K01]</button>
             </div>
           </div>
         </div>
 
-        <!-- 第 2 行：左側身分切換 + 右側統一填寫區 -->
+        <!-- 第 2 行：左側身分切換 + 右側填寫借用人資料 -->
         <div class="row-role-info">
           <div>
             <label>借用人身分</label>
@@ -512,36 +512,41 @@
             </div>
           </div>
 
-          <!-- 右側身分動態資料容器 -->
-          <div class="role-fields-container mode-student" id="roleContainer">
-            <!-- 學生專用欄位 -->
-            <div id="colClass">
-              <label>班級</label>
-              <input type="text" id="borrowStudentClass" placeholder="例：資三甲">
-            </div>
-            <div id="colSeat">
-              <label>座號</label>
-              <input type="number" id="borrowStudentSeat" placeholder="例：08" min="1">
-            </div>
-
-            <!-- 教職員專用欄位（處室單位下拉選單） -->
-            <div id="colDept" style="display: none;">
-              <label>處室單位</label>
-              <select id="borrowTeacherDept">
-                <option value="教務處">教務處</option>
-                <option value="學務處">學務處</option>
-                <option value="總務處">總務處</option>
-                <option value="輔導處">輔導處</option>
-                <option value="人事室">人事室</option>
-                <option value="會計室">會計室</option>
-                <option value="其他">其他</option>
-              </select>
+          <div>
+            <!-- 學生模式：班級、座號、姓名 同一行 -->
+            <div class="student-inputs-grid" id="groupStudent">
+              <div>
+                <label>班級</label>
+                <input type="text" id="borrowStudentClass" placeholder="例：資三甲">
+              </div>
+              <div>
+                <label>座號</label>
+                <input type="number" id="borrowStudentSeat" placeholder="例：08" min="1">
+              </div>
+              <div>
+                <label>借用人姓名</label>
+                <input type="text" id="borrowName" placeholder="請輸入學生姓名" oninput="syncBorrowName(this.value)">
+              </div>
             </div>
 
-            <!-- 姓名欄位（共用） -->
-            <div id="colName">
-              <label>借用人姓名</label>
-              <input type="text" id="borrowName" placeholder="請輸入姓名">
+            <!-- 教職員模式：處室單位（左）、借用人姓名（右）強制同一行並排 -->
+            <div class="teacher-inputs-grid" id="groupTeacher" style="display: none;">
+              <div>
+                <label>處室單位</label>
+                <select id="borrowTeacherDept">
+                  <option value="教務處">教務處</option>
+                  <option value="學務處">學務處</option>
+                  <option value="總務處">總務處</option>
+                  <option value="輔導處">輔導處</option>
+                  <option value="人事室">人事室</option>
+                  <option value="會計室">會計室</option>
+                  <option value="其他">其他</option>
+                </select>
+              </div>
+              <div>
+                <label>借用人姓名</label>
+                <input type="text" id="borrowTeacherName" placeholder="請輸入教職員姓名" oninput="syncBorrowName(this.value)">
+              </div>
             </div>
           </div>
         </div>
@@ -564,7 +569,6 @@
 
         <!-- 第 4 行：左半借用人簽名、右半確認借出按鈕 -->
         <div class="row-sign-submit">
-          <!-- 左半邊：簽名板 -->
           <div class="sign-col">
             <label>借用人簽名</label>
             <div class="sign-box">
@@ -576,7 +580,6 @@
             </div>
           </div>
 
-          <!-- 右半邊：注意事項與確認登記按鈕 -->
           <div class="submit-col">
             <div class="notice-box">
               ※ 請妥善保管借出物品，用畢後請儘速歸還。<br>
@@ -597,7 +600,6 @@
       </div>
 
       <div class="card-panel">
-        <!-- 歸還相機 + 右側呈現掃描物品結果與核對卡片 -->
         <div class="row-camera-item">
           <div class="scanner-box" id="readerReturn">相機待機中</div>
           <div class="camera-item-right">
@@ -606,7 +608,7 @@
               <input type="text" id="returnItemDisplay" class="item-result-input" placeholder="← 請開啟鏡頭對準歸還條碼，或點模擬掃碼" readonly>
             </div>
             <div class="scan-ctrl">
-              <button type="button" class="btn-action" id="btnCamReturn" onclick="toggleCamera('return')">開啟前鏡頭掃碼</button>
+              <button type="button" class="btn-action" id="btnCamReturn" onclick="toggleCamera('return')">開啟後鏡頭掃碼</button>
               <button type="button" class="btn-secondary" onclick="mockScanReturn('K01')">模擬歸還掃碼 [K01]</button>
             </div>
             <div class="borrow-ref-panel" id="returnRefPanel" style="display:none;">
@@ -698,44 +700,32 @@
 
   </div>
 
-  <!-- 載入核心邏輯腳本 -->
-  <script src="app.js"></script>
-
-  <!-- 強制覆蓋全域切換邏輯，確保選單切換 100% 正確生效 -->
   <script>
-    window.toggleRoleFields = function() {
-      const roleEl = document.querySelector('input[name="borrowRole"]:checked');
-      if (!roleEl) return;
-      const role = roleEl.value;
-      const container = document.getElementById('roleContainer');
-      const colClass = document.getElementById('colClass');
-      const colSeat = document.getElementById('colSeat');
-      const colDept = document.getElementById('colDept');
-      const nameInput = document.getElementById('borrowName');
-
-      if (!container || !colClass || !colSeat || !colDept || !nameInput) return;
+    function toggleRoleFields() {
+      const role = document.querySelector('input[name="borrowRole"]:checked').value;
+      const groupStudent = document.getElementById('groupStudent');
+      const groupTeacher = document.getElementById('groupTeacher');
 
       if (role === 'student') {
-        container.className = 'role-fields-container mode-student';
-        colClass.style.display = 'block';
-        colSeat.style.display = 'block';
-        colDept.style.display = 'none';
-        nameInput.placeholder = '請輸入學生姓名';
+        groupStudent.style.display = 'grid';
+        groupTeacher.style.display = 'none';
       } else {
-        container.className = 'role-fields-container mode-teacher';
-        colClass.style.display = 'none';
-        colSeat.style.display = 'none';
-        colDept.style.display = 'block'; // 顯示處室單位下拉選單
-        nameInput.placeholder = '請輸入教職員姓名';
+        groupStudent.style.display = 'none';
+        groupTeacher.style.display = 'grid';
       }
-    };
+    }
 
-    // 頁面初次載入執行
-    document.addEventListener('DOMContentLoaded', () => {
-      window.toggleRoleFields();
-    });
+    function syncBorrowName(val) {
+      const sName = document.getElementById('borrowName');
+      const tName = document.getElementById('borrowTeacherName');
+      if (sName) sName.value = val;
+      if (tName) tName.value = val;
+    }
+  </script>
 
-    // 歸還掃描結果連動補強：當掃描成功時同步更新 returnItemDisplay 輸入框
+  <script src="app.js"></script>
+
+  <script>
     const origHandleScan = window.handleScanResult;
     window.handleScanResult = function(decodedText, mode) {
       if (typeof origHandleScan === 'function') {
