@@ -5,22 +5,29 @@
   padding: 0;
 }
 
-body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+html, body {
+  width: 100%;
+  height: 100%;
   background-color: #f1f5f9;
   color: #1e293b;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   overflow: hidden;
-  /* 移除全域 user-select: none，避免 Safari 輸入框與點擊被鎖死 */
+  /* 嚴禁使用 user-select: none，確保 Safari 正常觸控聚焦 */
+  -webkit-user-select: auto;
+  user-select: auto;
 }
 
-/* 明確開放表單、按鈕可正常點擊、聚焦與文字選取 */
+/* 強制所有互動元件在最上層且必定接收點擊 */
 input, select, textarea, button, a {
-  -webkit-user-select: auto !important;
-  user-select: auto !important;
+  -webkit-user-select: text !important;
+  user-select: text !important;
   pointer-events: auto !important;
+  position: relative;
+  z-index: 5;
+}
+
+button {
+  cursor: pointer;
 }
 
 /* === 頂部導航列 === */
@@ -32,7 +39,8 @@ input, select, textarea, button, a {
   justify-content: space-between;
   align-items: center;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-  z-index: 10;
+  position: relative;
+  z-index: 20;
   flex-shrink: 0;
 }
 
@@ -108,7 +116,7 @@ input, select, textarea, button, a {
   color: #ffffff;
 }
 
-/* === 主容器與分頁板塊 === */
+/* === 主容器與版面 === */
 .main-container {
   flex: 1;
   padding: 20px;
@@ -117,6 +125,7 @@ input, select, textarea, button, a {
   margin: 0 auto;
   overflow: hidden;
   position: relative;
+  z-index: 10;
 }
 
 .page-view {
@@ -130,12 +139,13 @@ input, select, textarea, button, a {
 }
 
 .card {
-  position: relative; /* 限制內部元素層級 */
+  position: relative;
   background-color: #ffffff;
   border-radius: 16px;
   border: 1px solid #e2e8f0;
   padding: 20px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  z-index: 10;
 }
 
 .left-pane, .right-pane {
@@ -143,11 +153,11 @@ input, select, textarea, button, a {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  z-index: 1; /* 確保在同一圖層 */
 }
 
 .right-pane {
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .card-header {
@@ -170,7 +180,7 @@ h2 {
   display: block;
 }
 
-/* === 鏡頭與掃碼區 (嚴格限制在容器內，禁止溢出遮罩) === */
+/* === 掃描區域 (嚴格局部隔離，杜絕全螢幕透明遮罩) === */
 .scanner-box {
   width: 100%;
   aspect-ratio: 16 / 9;
@@ -179,15 +189,12 @@ h2 {
   overflow: hidden !important;
   position: relative !important;
   border: 1px solid #cbd5e1;
+  contain: paint; /* 隔離渲染樹，禁止任何子元素溢出 */
 }
 
-/* 強制 html5-qrcode 產生的 video 與 canvas 不超出容器 */
-.scanner-box video, 
-.scanner-box canvas {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: cover !important;
-  position: relative !important;
+.scanner-box * {
+  max-width: 100% !important;
+  max-height: 100% !important;
 }
 
 .tip-text {
@@ -221,10 +228,11 @@ h2 {
   background-color: #f8fafc;
   border: 1px solid #cbd5e1;
   border-radius: 8px;
-  padding: 9px 12px;
+  padding: 10px 12px;
   font-size: 1rem;
   color: #0f172a;
   outline: none;
+  box-shadow: none;
   transition: border-color 0.2s;
 }
 
@@ -249,7 +257,7 @@ h2 {
   gap: 12px;
 }
 
-/* === 身分切換元件 === */
+/* === 身分切換按鈕 === */
 .role-switch {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -262,7 +270,7 @@ h2 {
 .role-btn {
   border: none;
   background: transparent;
-  padding: 8px;
+  padding: 10px;
   font-size: 0.875rem;
   font-weight: 600;
   border-radius: 8px;
@@ -276,7 +284,7 @@ h2 {
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 
-/* === iPad 專用 Canvas 簽名板防滾動 === */
+/* === iPad 簽名板 (僅在 Canvas 本體停用滾動手勢) === */
 .sign-header {
   display: flex;
   justify-content: space-between;
@@ -290,13 +298,14 @@ h2 {
   border-radius: 12px;
   background-color: #f8fafc;
   overflow: hidden;
+  position: relative;
 }
 
 .signature-canvas {
   width: 100%;
   height: 100%;
   display: block;
-  touch-action: none !important; /* 杜絕 Safari 觸控橡皮筋干擾 */
+  touch-action: none !important;
 }
 
 /* === 按鈕樣式 === */
@@ -310,7 +319,6 @@ h2 {
   border: none;
   border-radius: 12px;
   font-size: 1.05rem;
-  cursor: pointer;
   box-shadow: 0 2px 4px rgba(37,99,235,0.2);
 }
 
@@ -326,7 +334,6 @@ h2 {
   border: none;
   border-radius: 10px;
   font-size: 0.95rem;
-  cursor: pointer;
 }
 
 .btn-success {
@@ -337,18 +344,16 @@ h2 {
   border: none;
   border-radius: 10px;
   font-size: 0.95rem;
-  cursor: pointer;
 }
 
 .btn-sm {
   background-color: #f1f5f9;
   border: 1px solid #cbd5e1;
   color: #475569;
-  padding: 5px 12px;
+  padding: 6px 12px;
   border-radius: 6px;
   font-size: 0.75rem;
   font-weight: 600;
-  cursor: pointer;
 }
 
 .btn-text-danger {
@@ -357,7 +362,6 @@ h2 {
   color: #e11d48;
   font-size: 0.75rem;
   font-weight: 600;
-  cursor: pointer;
 }
 
 /* === 表格清單視圖 === */
@@ -373,6 +377,7 @@ h2 {
   flex: 1;
   overflow-y: auto;
   margin-top: 12px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .data-table {
@@ -404,7 +409,7 @@ h2 {
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 50;
+  z-index: 100;
   padding: 16px;
 }
 
@@ -418,6 +423,8 @@ h2 {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  position: relative;
+  z-index: 101;
 }
 
 .modal-header {
@@ -431,7 +438,6 @@ h2 {
   border: none;
   font-size: 1.5rem;
   color: #94a3b8;
-  cursor: pointer;
 }
 
 .modal-info {
