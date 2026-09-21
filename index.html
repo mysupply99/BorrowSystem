@@ -21,10 +21,10 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Noto Sans TC", sans-serif;
       background-color: #f3f4f6;
       color: #1f2937;
-      padding: 10px 14px;
+      padding: 12px 16px;
     }
     .app-container {
-      max-width: 980px;
+      max-width: 960px;
       margin: 0 auto;
     }
     
@@ -35,7 +35,6 @@
       display: block;
     }
 
-    /* 頂部導覽列 */
     .top-bar {
       display: flex;
       justify-content: space-between;
@@ -43,16 +42,16 @@
       margin-bottom: 8px;
     }
     .top-bar h2 {
-      font-size: 1.2rem;
+      font-size: 1.25rem;
       font-weight: 700;
     }
     .btn-back {
       background: #4b5563;
       color: #fff;
       border: none;
-      padding: 5px 12px;
+      padding: 6px 14px;
       border-radius: 6px;
-      font-size: 0.85rem;
+      font-size: 0.88rem;
       cursor: pointer;
     }
 
@@ -61,10 +60,10 @@
       justify-content: space-between;
       align-items: center;
       margin-bottom: 8px;
-      padding: 5px 10px;
+      padding: 6px 12px;
       background: #ffffff;
       border-radius: 6px;
-      font-size: 0.78rem;
+      font-size: 0.8rem;
       box-shadow: 0 1px 3px rgba(0,0,0,0.05);
     }
     .status-dot {
@@ -81,24 +80,24 @@
     /* 首頁選單 */
     .home-header {
       text-align: center;
-      margin: 20px 0 16px;
+      margin: 24px 0 20px;
     }
     .home-header h1 {
       font-size: 1.8rem;
       font-weight: 800;
       color: #111827;
-      margin-bottom: 4px;
+      margin-bottom: 6px;
     }
     .menu-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 14px;
-      margin-top: 14px;
+      gap: 16px;
+      margin-top: 16px;
     }
     .menu-card {
       background: #ffffff;
-      border-radius: 12px;
-      padding: 30px 14px;
+      border-radius: 14px;
+      padding: 32px 16px;
       text-align: center;
       cursor: pointer;
       box-shadow: 0 4px 12px rgba(0,0,0,0.05);
@@ -106,38 +105,33 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
     }
     .menu-card:active { transform: scale(0.98); }
     .menu-card.btn-borrow { border-color: #2563eb; background: #eff6ff; }
     .menu-card.btn-return { border-color: #16a34a; background: #f0fdf4; }
     .menu-card.btn-details { border-color: #4b5563; background: #f9fafb; }
-    .menu-card h3 { font-size: 1.25rem; font-weight: 700; }
-    .menu-card p { font-size: 0.82rem; color: #6b7280; }
+    .menu-card h3 { font-size: 1.3rem; font-weight: 700; }
+    .menu-card p { font-size: 0.85rem; color: #6b7280; }
 
-    /* 緊湊卡片面板 */
+    /* 表單卡片 */
     .card-panel {
       background: #ffffff;
       border-radius: 10px;
-      padding: 12px 16px;
+      padding: 14px 18px;
       box-shadow: 0 2px 6px rgba(0,0,0,0.05);
     }
 
-    /* ===== 第 1 行：左側相機 + 右側掃描結果與控制按鈕 ===== */
-    .row-camera-item {
-      display: grid;
-      grid-template-columns: 140px 1fr;
-      gap: 16px;
+    /* 頂部掃描與物品橫向列 (如照片配置) */
+    .scan-asset-row {
+      display: flex;
+      gap: 14px;
       align-items: center;
-      margin-bottom: 10px;
-      background: #f8fafc;
-      padding: 10px;
-      border-radius: 8px;
-      border: 1px solid #e2e8f0;
+      margin-bottom: 12px;
     }
     .scanner-box {
-      width: 140px;
-      height: 140px;
+      width: 130px;
+      height: 130px;
       background: #111827;
       border-radius: 10px;
       overflow: hidden;
@@ -145,131 +139,26 @@
       align-items: center;
       justify-content: center;
       color: #9ca3af;
-      font-size: 0.8rem;
-      border: 2px solid #cbd5e1;
+      font-size: 0.85rem;
+      border: 2px solid #e5e7eb;
+      flex-shrink: 0;
     }
-
-    /* 後鏡頭需使用標準正向預覽，移除 scaleX 鏡像 */
     .scanner-box video {
       object-fit: cover !important;
       width: 100% !important;
       height: 100% !important;
+      border-radius: 8px;
     }
-
-    .camera-item-right {
+    .asset-input-wrap {
+      flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      width: 100%;
+      gap: 6px;
     }
     .scan-ctrl {
       display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    /* 掃描結果專用突顯輸入框 */
-    .item-result-input {
-      font-size: 1.05rem !important;
-      font-weight: 700 !important;
-      color: #1e3a8a !important;
-      background: #eff6ff !important;
-      border: 1.5px solid #93c5fd !important;
-    }
-
-    /* ===== 第 2 行：左側身分選單 + 右側填寫區 ===== */
-    .row-role-info {
-      display: grid;
-      grid-template-columns: 180px 1fr;
-      gap: 14px;
-      align-items: center;
-      margin-bottom: 10px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #f1f5f9;
-    }
-    .role-selection {
-      display: flex;
-      gap: 14px;
-      height: 38px;
-      align-items: center;
-    }
-    .role-option {
-      display: flex;
-      align-items: center;
       gap: 6px;
-      font-size: 0.95rem;
-      font-weight: 700;
-      cursor: pointer;
-      color: #1f2937;
     }
-    .role-option input[type="radio"] {
-      width: 18px;
-      height: 18px;
-    }
-
-    /* 學生：班級、座號、姓名 同一行 */
-    .student-inputs-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1.2fr;
-      gap: 10px;
-      width: 100%;
-    }
-
-    /* 教職員：處室單位（左）、借用人姓名（右）強制同一行並排 */
-    .teacher-inputs-grid {
-      display: grid !important;
-      grid-template-columns: 1fr 1fr !important;
-      gap: 12px;
-      width: 100%;
-      align-items: center;
-    }
-
-    /* 第 3 行：時間、數量、用途說明 同一行 */
-    .grid-row-3-equal {
-      display: grid;
-      grid-template-columns: 1.2fr 0.7fr 2.1fr;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-
-    /* 第 4 行：左半簽名、右半確認按鈕 */
-    .row-sign-submit {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
-      align-items: stretch;
-      margin-top: 4px;
-    }
-    .sign-col {
-      display: flex;
-      flex-direction: column;
-    }
-    .submit-col {
-      display: flex;
-      flex-direction: column;
-      justify-content: flex-end;
-    }
-
-    label {
-      display: block;
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: #374151;
-      margin-bottom: 3px;
-    }
-    input, textarea, select {
-      width: 100%;
-      padding: 6px 8px;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      font-size: 0.9rem;
-      background: #fff;
-    }
-    input:read-only, textarea:read-only {
-      background: #f1f5f9;
-      color: #475569;
-    }
-
     .btn-action, .btn-secondary {
       color: #fff;
       border: none;
@@ -281,26 +170,106 @@
     .btn-action { background: #2563eb; }
     .btn-secondary { background: #4b5563; }
 
-    /* 簽名框（高 110px） */
+    /* 身分單行 Grid 排版 */
+    .identity-row {
+      display: grid;
+      grid-template-columns: 140px 1fr;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .role-selection {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      height: 38px;
+    }
+    .role-option {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .role-option input[type="radio"] {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* 學生欄位：班級(1fr) + 座號(1fr) + 借用人姓名(1.5fr) */
+    .fields-student {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1.5fr;
+      gap: 10px;
+    }
+    /* 教職員欄位：處室單位(1.2fr) + 借用人姓名(1.5fr) */
+    .fields-teacher {
+      display: none;
+      grid-template-columns: 1.2fr 1.5fr;
+      gap: 10px;
+    }
+
+    /* 時間、數量、用途排版 */
+    .grid-row-meta {
+      display: grid;
+      grid-template-columns: 1.4fr 0.7fr 2.5fr;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    /* 下半部：左邊簽名板，右邊注意事項與按鈕 (如照片排版) */
+    .bottom-split {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 16px;
+      align-items: end;
+      margin-top: 6px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 4px;
+    }
+    input, textarea, select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 0.92rem;
+      background: #fff;
+    }
+    input:read-only, textarea:read-only {
+      background: #f3f4f6;
+      color: #6b7280;
+    }
+
+    /* 簽名框樣式（強制 touch-action 防止 iPad 畫面滾動干擾） */
     .sign-box {
       border: 1.5px dashed #9ca3af;
       background: #fff;
       border-radius: 6px;
-      height: 110px;
+      height: 120px;
+      width: 100%;
       position: relative;
-      touch-action: none;
-      margin-top: 2px;
+      touch-action: none !important;
+      -webkit-user-select: none;
+      user-select: none;
     }
     canvas {
       width: 100%;
       height: 100%;
       display: block;
+      touch-action: none !important;
     }
     .sign-meta {
       display: flex;
       justify-content: space-between;
-      margin-top: 3px;
-      font-size: 0.72rem;
+      margin-top: 4px;
+      font-size: 0.75rem;
       color: #6b7280;
     }
     .btn-clear {
@@ -312,61 +281,53 @@
       font-size: 0.75rem;
     }
 
-    .borrow-ref-panel {
-      background: #eff6ff;
-      border: 1px solid #bfdbfe;
-      border-radius: 6px;
-      padding: 8px 12px;
-      margin-top: 4px;
-    }
-    .borrow-ref-panel h4 {
-      font-size: 0.85rem;
-      color: #1e40af;
-      margin-bottom: 3px;
-    }
-    .ref-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 4px;
-      font-size: 0.8rem;
-      color: #1e3a8a;
-    }
-
     .notice-box {
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-radius: 6px;
-      padding: 8px 10px;
-      font-size: 0.73rem;
+      font-size: 0.76rem;
       color: #6b7280;
-      line-height: 1.35;
-      margin-bottom: 8px;
+      line-height: 1.4;
+      margin-bottom: 10px;
     }
-
     .btn-submit {
       width: 100%;
-      height: 52px;
+      padding: 12px;
       background: #16a34a;
       color: #fff;
       border: none;
-      border-radius: 8px;
+      border-radius: 6px;
       font-size: 1.05rem;
       font-weight: 700;
       cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
     .btn-submit.btn-blue {
       background: #2563eb;
     }
 
-    /* 詳細清單表格 */
+    /* 歸還核對小卡 */
+    .borrow-ref-panel {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 10px;
+    }
+    .borrow-ref-panel h4 {
+      font-size: 0.88rem;
+      color: #1e40af;
+      margin-bottom: 4px;
+    }
+    .ref-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      font-size: 0.82rem;
+      color: #1e3a8a;
+    }
+
+    /* 表格樣式 */
     .tabs {
       display: flex;
       gap: 8px;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
     .tab-btn {
       flex: 1;
@@ -375,7 +336,7 @@
       background: #e5e7eb;
       border: none;
       border-radius: 6px;
-      font-size: 0.88rem;
+      font-size: 0.9rem;
       font-weight: 600;
       cursor: pointer;
       color: #4b5563;
@@ -393,11 +354,11 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.82rem;
+      font-size: 0.85rem;
       text-align: left;
     }
     th, td {
-      padding: 8px 10px;
+      padding: 10px 12px;
       border-bottom: 1px solid #e5e7eb;
     }
     th {
@@ -406,8 +367,8 @@
       color: #374151;
     }
     .sign-thumbnail {
-      width: 48px;
-      height: 22px;
+      width: 50px;
+      height: 24px;
       object-fit: contain;
       border: 1px solid #d1d5db;
       background: #fff;
@@ -415,30 +376,20 @@
     }
     .status-badge {
       display: inline-block;
-      padding: 2px 5px;
+      padding: 2px 6px;
       border-radius: 4px;
-      font-size: 0.7rem;
+      font-size: 0.72rem;
       font-weight: 600;
     }
     .status-borrowed { background: #fee2e2; color: #991b1b; }
     .status-returned { background: #dcfce7; color: #166534; }
-    .role-badge {
-      display: inline-block;
-      padding: 1px 4px;
-      border-radius: 4px;
-      font-size: 0.7rem;
-      font-weight: 600;
-      margin-right: 4px;
-    }
-    .badge-teacher { background: #fef3c7; color: #92400e; }
-    .badge-student { background: #e0e7ff; color: #3730a3; }
   </style>
 </head>
 <body>
 
   <div class="app-container">
 
-    <!-- 狀態指示列 -->
+    <!-- 頂部連線狀態列 -->
     <div class="status-bar">
       <div>
         <span class="status-dot" id="dbStatusDot"></span>
@@ -480,15 +431,12 @@
       </div>
 
       <div class="card-panel">
-
-        <!-- 第 1 行：左側相機 + 右側呈現掃描結果與按鈕 -->
-        <div class="row-camera-item">
+        <!-- 頂部掃碼與物品 -->
+        <div class="scan-asset-row">
           <div class="scanner-box" id="readerBorrow">相機待機中</div>
-          <div class="camera-item-right">
-            <div>
-              <label>借出物品 (Asset ID / 名稱)</label>
-              <input type="text" id="borrowItemId" class="item-result-input" placeholder="← 請點開啟鏡頭對準條碼，或點模擬掃碼" readonly>
-            </div>
+          <div class="asset-input-wrap">
+            <label>借出物品 (Asset ID / 名稱)</label>
+            <input type="text" id="borrowItemId" placeholder="← 請點開啟鏡頭對準條碼，或點模擬掃碼" readonly>
             <div class="scan-ctrl">
               <button type="button" class="btn-action" id="btnCamBorrow" onclick="toggleCamera('borrow')">開啟後鏡頭掃碼</button>
               <button type="button" class="btn-secondary" onclick="mockScanBorrow('K01')">模擬掃碼 [K01]</button>
@@ -496,63 +444,61 @@
           </div>
         </div>
 
-        <!-- 第 2 行：左側身分切換 + 右側填寫借用人資料 -->
-        <div class="row-role-info">
+        <!-- 身分選擇與對應欄位 (完整獨立分組) -->
+        <div class="identity-row">
           <div>
             <label>借用人身分</label>
             <div class="role-selection">
               <label class="role-option">
-                <input type="radio" name="borrowRole" value="student" checked onchange="toggleRoleFields()">
+                <input type="radio" name="borrowRole" value="student" checked onchange="handleRoleChange()">
                 學生
               </label>
               <label class="role-option">
-                <input type="radio" name="borrowRole" value="teacher" onchange="toggleRoleFields()">
+                <input type="radio" name="borrowRole" value="teacher" onchange="handleRoleChange()">
                 教職員
               </label>
             </div>
           </div>
 
-          <div>
-            <!-- 學生模式：班級、座號、姓名 同一行 -->
-            <div class="student-inputs-grid" id="groupStudent">
-              <div>
-                <label>班級</label>
-                <input type="text" id="borrowStudentClass" placeholder="例：資三甲">
-              </div>
-              <div>
-                <label>座號</label>
-                <input type="number" id="borrowStudentSeat" placeholder="例：08" min="1">
-              </div>
-              <div>
-                <label>借用人姓名</label>
-                <input type="text" id="borrowName" placeholder="請輸入學生姓名" oninput="syncBorrowName(this.value)">
-              </div>
+          <!-- 學生專屬欄位 -->
+          <div class="fields-student" id="boxStudentFields">
+            <div>
+              <label>班級</label>
+              <input type="text" id="borrowStudentClass" placeholder="例：資三甲">
             </div>
+            <div>
+              <label>座號</label>
+              <input type="number" id="borrowStudentSeat" placeholder="例：08" min="1">
+            </div>
+            <div>
+              <label>借用人姓名</label>
+              <input type="text" id="borrowStudentName" placeholder="請輸入學生姓名">
+            </div>
+          </div>
 
-            <!-- 教職員模式：處室單位（左）、借用人姓名（右）強制同一行並排 -->
-            <div class="teacher-inputs-grid" id="groupTeacher" style="display: none;">
-              <div>
-                <label>處室單位</label>
-                <select id="borrowTeacherDept">
-                  <option value="教務處">教務處</option>
-                  <option value="學務處">學務處</option>
-                  <option value="總務處">總務處</option>
-                  <option value="輔導處">輔導處</option>
-                  <option value="人事室">人事室</option>
-                  <option value="會計室">會計室</option>
-                  <option value="其他">其他</option>
-                </select>
-              </div>
-              <div>
-                <label>借用人姓名</label>
-                <input type="text" id="borrowTeacherName" placeholder="請輸入教職員姓名" oninput="syncBorrowName(this.value)">
-              </div>
+          <!-- 教職員專屬欄位 (預設嚴格隱藏) -->
+          <div class="fields-teacher" id="boxTeacherFields">
+            <div>
+              <label>處室單位</label>
+              <select id="borrowTeacherDept">
+                <option value="教務處">教務處</option>
+                <option value="學務處">學務處</option>
+                <option value="總務處">總務處</option>
+                <option value="輔導處">輔導處</option>
+                <option value="人事室">人事室</option>
+                <option value="會計室">會計室</option>
+                <option value="其他">其他</option>
+              </select>
+            </div>
+            <div>
+              <label>借用人姓名</label>
+              <input type="text" id="borrowTeacherName" placeholder="請輸入教職員姓名">
             </div>
           </div>
         </div>
 
-        <!-- 第 3 行：借用日期/時間、數量、用途說明 同一行 -->
-        <div class="grid-row-3-equal">
+        <!-- 時間、數量、用途說明 -->
+        <div class="grid-row-meta">
           <div>
             <label>借用日期 / 時間</label>
             <input type="text" id="borrowTime" readonly>
@@ -567,20 +513,20 @@
           </div>
         </div>
 
-        <!-- 第 4 行：左半借用人簽名、右半確認借出按鈕 -->
-        <div class="row-sign-submit">
-          <div class="sign-col">
+        <!-- 下半部：左邊簽名、右邊確認 -->
+        <div class="bottom-split">
+          <div>
             <label>借用人簽名</label>
             <div class="sign-box">
               <canvas id="padBorrow"></canvas>
             </div>
             <div class="sign-meta">
               <span>請借用人於上方框內手寫簽名</span>
-              <button type="button" class="btn-clear" onclick="padBorrow.clear()">清除重簽</button>
+              <button type="button" class="btn-clear" onclick="clearPad('borrow')">清除重簽</button>
             </div>
           </div>
 
-          <div class="submit-col">
+          <div>
             <div class="notice-box">
               ※ 請妥善保管借出物品，用畢後請儘速歸還。<br>
               ※ 如有遺失或損壞需擔負損害賠償責任。
@@ -600,31 +546,29 @@
       </div>
 
       <div class="card-panel">
-        <div class="row-camera-item">
+        <div class="scan-asset-row">
           <div class="scanner-box" id="readerReturn">相機待機中</div>
-          <div class="camera-item-right">
-            <div>
-              <label>歸還物品 (Asset ID / 名稱)</label>
-              <input type="text" id="returnItemDisplay" class="item-result-input" placeholder="← 請開啟鏡頭對準歸還條碼，或點模擬掃碼" readonly>
-            </div>
+          <div class="asset-input-wrap">
+            <label>歸還物品掃描</label>
+            <input type="text" id="returnItemDisplay" placeholder="← 請對準條碼，系統自動調出借用紀錄" readonly>
             <div class="scan-ctrl">
               <button type="button" class="btn-action" id="btnCamReturn" onclick="toggleCamera('return')">開啟後鏡頭掃碼</button>
               <button type="button" class="btn-secondary" onclick="mockScanReturn('K01')">模擬歸還掃碼 [K01]</button>
             </div>
-            <div class="borrow-ref-panel" id="returnRefPanel" style="display:none;">
-              <h4>原借出資訊核對</h4>
-              <div class="ref-grid">
-                <div><strong>物品：</strong><span id="refItem">-</span></div>
-                <div><strong>時間：</strong><span id="refTime">-</span></div>
-                <div><strong>借用人：</strong><span id="refBorrower">-</span></div>
-                <div><strong>數量/用途：</strong><span id="refPurpose">-</span></div>
-              </div>
-            </div>
           </div>
         </div>
 
-        <!-- 歸還時間、歸還人姓名、備註 同一行 -->
-        <div class="grid-row-3-equal">
+        <div class="borrow-ref-panel" id="returnRefPanel" style="display:none;">
+          <h4>原借出資訊核對</h4>
+          <div class="ref-grid">
+            <div><strong>物品：</strong><span id="refItem">-</span></div>
+            <div><strong>借出時間：</strong><span id="refTime">-</span></div>
+            <div><strong>借用人：</strong><span id="refBorrower">-</span></div>
+            <div><strong>數量 / 用途：</strong><span id="refPurpose">-</span></div>
+          </div>
+        </div>
+
+        <div class="grid-row-meta">
           <div>
             <label>歸還日期 / 時間</label>
             <input type="text" id="returnTime" readonly>
@@ -635,28 +579,23 @@
           </div>
           <div>
             <label>備註說明</label>
-            <input type="text" id="returnRemark" placeholder="設備狀況良好 / 異常填報">
+            <input type="text" id="returnRemark" placeholder="設備歸還狀況良好 / 異常狀況">
           </div>
         </div>
 
-        <!-- 左半歸還人簽名、右半確認歸還按鈕 -->
-        <div class="row-sign-submit">
-          <div class="sign-col">
+        <div class="bottom-split">
+          <div>
             <label>歸還人簽名</label>
             <div class="sign-box">
               <canvas id="padReturn"></canvas>
             </div>
             <div class="sign-meta">
               <span>請歸還人於上方框內手寫簽名</span>
-              <button type="button" class="btn-clear" onclick="padReturn.clear()">清除重簽</button>
+              <button type="button" class="btn-clear" onclick="clearPad('return')">清除重簽</button>
             </div>
           </div>
 
-          <div class="submit-col">
-            <div class="notice-box">
-              ※ 請管理員確實點驗歸還品項與數量是否無誤。<br>
-              ※ 點收無誤後即可結案。
-            </div>
+          <div>
             <button class="btn-submit" onclick="submitReturn()">確認歸還結案</button>
           </div>
         </div>
@@ -700,46 +639,6 @@
 
   </div>
 
-  <script>
-    function toggleRoleFields() {
-      const role = document.querySelector('input[name="borrowRole"]:checked').value;
-      const groupStudent = document.getElementById('groupStudent');
-      const groupTeacher = document.getElementById('groupTeacher');
-
-      if (role === 'student') {
-        groupStudent.style.display = 'grid';
-        groupTeacher.style.display = 'none';
-      } else {
-        groupStudent.style.display = 'none';
-        groupTeacher.style.display = 'grid';
-      }
-    }
-
-    function syncBorrowName(val) {
-      const sName = document.getElementById('borrowName');
-      const tName = document.getElementById('borrowTeacherName');
-      if (sName) sName.value = val;
-      if (tName) tName.value = val;
-    }
-  </script>
-
   <script src="app.js"></script>
-
-  <script>
-    const origHandleScan = window.handleScanResult;
-    window.handleScanResult = function(decodedText, mode) {
-      if (typeof origHandleScan === 'function') {
-        origHandleScan(decodedText, mode);
-      }
-      if (mode === 'return') {
-        const cleanCode = decodedText.trim();
-        const itemName = (typeof ASSET_MAP !== 'undefined' && ASSET_MAP[cleanCode]) ? ASSET_MAP[cleanCode] : "自訂物品";
-        const retInput = document.getElementById('returnItemDisplay');
-        if (retInput) {
-          retInput.value = `[${cleanCode}] ${itemName}`;
-        }
-      }
-    };
-  </script>
 </body>
 </html>
