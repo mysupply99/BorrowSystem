@@ -106,6 +106,7 @@ const el = {
 
 // === 5. iPad Canvas Retina 解析度校正 ===
 function initSignatureCanvas(canvas, currentPad) {
+  if (!canvas) return null;
   const ratio = Math.max(window.devicePixelRatio || 1, 1);
   const rect = canvas.getBoundingClientRect();
 
@@ -129,6 +130,9 @@ function initSignatureCanvas(canvas, currentPad) {
 
 // === 6. 條碼掃描模組 (15 FPS / 85% 視窗) ===
 function initQrScanner() {
+  const qrElement = document.getElementById("qr-reader");
+  if (!qrElement) return;
+
   html5QrCode = new Html5Qrcode("qr-reader");
   const config = {
     fps: 15,
@@ -144,13 +148,13 @@ function initQrScanner() {
     config,
     (decodedText) => {
       beeper.beep();
-      el.itemCode.value = decodedText;
+      if (el.itemCode) el.itemCode.value = decodedText;
     },
     (err) => {
       // 掃描幀無條碼略過
     }
   ).catch(err => {
-    console.warn("鏡頭初始化失敗或未授予存取權限:", err);
+    console.warn("鏡頭未啟動或未給予權限:", err);
   });
 }
 
@@ -179,7 +183,6 @@ function switchTab(tab) {
     el.pageBorrow.classList.remove("is-hidden");
     el.pageReturn.classList.add("is-hidden");
 
-    // 切回借用頁延遲 150ms 重繪 Canvas，避免 Safari 寬度為 0 破圖
     setTimeout(() => {
       borrowPad = initSignatureCanvas(el.canvasBorrow, borrowPad);
     }, 150);
@@ -194,8 +197,6 @@ function switchTab(tab) {
 }
 
 // === 9. 雲端資料庫操作 (Supabase) ===
-
-// 借出登記寫入
 async function submitBorrowRecord() {
   const itemCode = el.itemCode.value.trim();
   const itemName = el.itemName.value.trim();
@@ -253,7 +254,6 @@ async function submitBorrowRecord() {
     alert("登記失敗，請檢查網路連線或稍後再試！");
   } else {
     alert("借用登記成功！");
-    // 重置欄位
     el.itemCode.value = "";
     el.itemName.value = "";
     el.itemQty.value = "1";
@@ -268,6 +268,7 @@ async function submitBorrowRecord() {
 
 // 取得未歸還物品清單
 async function fetchUnreturnedList() {
+  if (!el.unreturnedTbody) return;
   el.unreturnedTbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 24px; color: #94a3b8;">載入中...</td></tr>`;
 
   const { data, error } = await supabase
@@ -379,27 +380,29 @@ async function submitReturnRecord() {
 // === 10. 事件監聽綁定 ===
 window.addEventListener("DOMContentLoaded", () => {
   // 音量初始
-  el.beepVol.value = beeper.volume;
-  el.beepVol.addEventListener("input", (e) => beeper.setVolume(e.target.value));
+  if (el.beepVol) {
+    el.beepVol.value = beeper.volume;
+    el.beepVol.addEventListener("input", (e) => beeper.setVolume(e.target.value));
+  }
 
   // 身分切換
-  el.btnStudent.addEventListener("click", () => switchRole("student"));
-  el.btnStaff.addEventListener("click", () => switchRole("staff"));
+  if (el.btnStudent) el.btnStudent.addEventListener("click", () => switchRole("student"));
+  if (el.btnStaff) el.btnStaff.addEventListener("click", () => switchRole("staff"));
 
   // 分頁切換
-  el.navBorrow.addEventListener("click", () => switchTab("borrow"));
-  el.navReturn.addEventListener("click", () => switchTab("return"));
+  if (el.navBorrow) el.navBorrow.addEventListener("click", () => switchTab("borrow"));
+  if (el.navReturn) el.navReturn.addEventListener("click", () => switchTab("return"));
 
-  // 簽名板按鈕
-  el.btnClearBorrowSign.addEventListener("click", () => borrowPad && borrowPad.clear());
-  el.btnClearReturnSign.addEventListener("click", () => returnPad && returnPad.clear());
+  // 簽名板清除按鈕
+  if (el.btnClearBorrowSign) el.btnClearBorrowSign.addEventListener("click", () => borrowPad && borrowPad.clear());
+  if (el.btnClearReturnSign) el.btnClearReturnSign.addEventListener("click", () => returnPad && returnPad.clear());
 
-  // 表單送出
-  el.btnSubmitBorrow.addEventListener("click", submitBorrowRecord);
-  el.btnRefreshList.addEventListener("click", fetchUnreturnedList);
-  el.btnCancelReturn.addEventListener("click", closeReturnModal);
-  el.btnCloseModal.addEventListener("click", closeReturnModal);
-  el.btnConfirmReturn.addEventListener("click", submitReturnRecord);
+  // 表單送出與清單更新
+  if (el.btnSubmitBorrow) el.btnSubmitBorrow.addEventListener("click", submitBorrowRecord);
+  if (el.btnRefreshList) el.btnRefreshList.addEventListener("click", fetchUnreturnedList);
+  if (el.btnCancelReturn) el.btnCancelReturn.addEventListener("click", closeReturnModal);
+  if (el.btnCloseModal) el.btnCloseModal.addEventListener("click", closeReturnModal);
+  if (el.btnConfirmReturn) el.btnConfirmReturn.addEventListener("click", submitReturnRecord);
 
   // 初始化簽名板與鏡頭掃描
   setTimeout(() => {
