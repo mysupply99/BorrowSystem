@@ -6,14 +6,10 @@ const SUPABASE_URL = "https://qdiwyzkjgxvuinulpvsg.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkaXd5emtqZ3h2dWludWxwdnNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4Mjg4ODQsImV4cCI6MjEwNTQwNDg4NH0.U_IUlKcz-6Qgr_AmEf-EyVTabdfs5oMEQXujBiRDfVg";
 
 
-
 let dbClient = null;
 try {
   if (window.supabase && typeof window.supabase.createClient === "function") {
     dbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    console.log("Supabase Client 初始化成功");
-  } else {
-    console.warn("未偵測到 Supabase SDK");
   }
 } catch (e) {
   console.error("Supabase 初始化異常:", e);
@@ -62,20 +58,28 @@ class Beeper {
       osc.start();
       osc.stop(this.ctx.currentTime + 0.08);
     } catch (err) {
-      console.warn("蜂鳴聲播放略過:", err);
+      console.warn("音效略過:", err);
     }
   }
 }
 
 const beeper = new Beeper();
 
-// === 3. 狀態變數 ===
+// === 3. 全域狀態管理 ===
 let currentRole = "student";
-let activeTab = "borrow";
+let activeMainTab = "borrow"; // "borrow" | "return" | "records"
+let activeRecordsSubTab = "unreturned"; // "unreturned" | "returned"
+
 let borrowPad = null;
 let returnPad = null;
-let html5QrCode = null;
-let selectedReturnRecordId = null;
+
+let qrBorrow = null;
+let qrReturn = null;
+let isBorrowCameraOn = false;
+let isReturnCameraOn = false;
+
+let selectedBorrowRecord = null; // 歸還操作選定的紀錄物件
+let cachedUnreturnedRecords = []; // 快取未還資料供掃碼匹配
 
 // === 4. 高解析度 Canvas 初始化 ===
 function initSignatureCanvas(canvas, currentPad) {
@@ -101,41 +105,116 @@ function initSignatureCanvas(canvas, currentPad) {
   }
 }
 
-// === 5. 掃碼相機模組 (延遲安全加載) ===
-function initQrScanner() {
-  const qrBox = document.getElementById("qr-reader");
-  if (!qrBox || typeof Html5Qrcode === "undefined") return;
+// === 5. 掃描模組（借用 與 歸還 獨立鏡頭） ===
+
+// 借用掃描器
+async function toggleBorrowScanner() {
+  const btn = document.getElementById("btn-toggle-scanner-borrow");
+  const qrBox = document.getElementById("qr-reader-borrow");
+
+  if (isBorrowCameraOn) {
+    if (qrBorrow) await qrBorrow.stop();
+    isBorrowCameraOn = false;
+    btn.innerText = "開啟鏡頭";
+    btn.classList.remove("camera-active");
+    qrBox.innerHTML = `<div class="scanner-placeholder"><span class="placeholder-icon">📷</span><p>點擊上方「開啟鏡頭」掃描 QR Code</p></div>`;
+    return;
+  }
 
   try {
-    html5QrCode = new Html5Qrcode("qr-reader");
-    const config = {
-      fps: 15,
-      qrbox: (viewfinderWidth, viewfinderHeight) => {
-        const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.85);
-        return { width: edge, height: edge };
-      },
-      aspectRatio: 1.777778
-    };
+    if (!qrBorrow) qrBorrow = new Html5Qrcode("qr-reader-borrow");
+    btn.innerText = "啟動中...";
+    btn.disabled = true;
 
-    html5QrCode.start(
+    await qrBorrow.start(
       { facingMode: "environment" },
-      config,
+      { fps: 15, qrbox: (w, h) => ({ width: Math.floor(Math.min(w, h) * 0.85), height: Math.floor(Math.min(w, h) * 0.85) }) },
       (decodedText) => {
         beeper.beep();
-        const codeInput = document.getElementById("borrow-item-code");
-        if (codeInput) codeInput.value = decodedText;
+        const input = document.getElementById("borrow-item-code");
+        if (input) {
+          input.value = decodedText;
+          input.style.borderColor = "#10b981";
+          setTimeout(() => input.style.borderColor = "", 1000);
+        }
       },
       () => {}
-    ).catch(err => {
-      console.log("鏡頭未啟動或使用者未授權:", err);
-      qrBox.innerHTML = `<div style="color:#94a3b8; font-size:12px; display:flex; height:100%; align-items:center; justify-content:center;">相機已就緒 (手動輸入代碼亦可)</div>`;
-    });
+    );
+
+    isBorrowCameraOn = true;
+    btn.disabled = false;
+    btn.innerText = "關閉鏡頭";
+    btn.classList.add("camera-active");
   } catch (err) {
-    console.warn("掃描器啟動例外:", err);
+    alert("無法開啟借用鏡頭，請確認相機權限！");
+    btn.disabled = false;
+    btn.innerText = "開啟鏡頭";
   }
 }
 
-// === 6. 身分切換 (學生 vs 教職員) ===
+// 歸還掃描器 (自動配對未歸還清冊)
+async function toggleReturnScanner() {
+  const btn = document.getElementById("btn-toggle-scanner-return");
+  const qrBox = document.getElementById("qr-reader-return");
+
+  if (isReturnCameraOn) {
+    if (qrReturn) await qrReturn.stop();
+    isReturnCameraOn = false;
+    btn.innerText = "開啟鏡頭";
+    btn.classList.remove("camera-active");
+    qrBox.innerHTML = `<div class="scanner-placeholder"><span class="placeholder-icon">📷</span><p>掃描歸還物品 QR Code 可自動帶入紀錄</p></div>`;
+    return;
+  }
+
+  try {
+    if (!qrReturn) qrReturn = new Html5Qrcode("qr-reader-return");
+    btn.innerText = "啟動中...";
+    btn.disabled = true;
+
+    await qrReturn.start(
+      { facingMode: "environment" },
+      { fps: 15, qrbox: (w, h) => ({ width: Math.floor(Math.min(w, h) * 0.85), height: Math.floor(Math.min(w, h) * 0.85) }) },
+      (decodedText) => {
+        beeper.beep();
+        // 比對目前未還快取中是否有此 item_code
+        const match = cachedUnreturnedRecords.find(r => r.item_code === decodedText);
+        if (match) {
+          selectRecordForReturn(match);
+        } else {
+          alert(`未找到此代碼 [${decodedText}] 借出中的紀錄！`);
+        }
+      },
+      () => {}
+    );
+
+    isReturnCameraOn = true;
+    btn.disabled = false;
+    btn.innerText = "關閉鏡頭";
+    btn.classList.add("camera-active");
+  } catch (err) {
+    alert("無法開啟歸還鏡頭，請確認相機權限！");
+    btn.disabled = false;
+    btn.innerText = "開啟鏡頭";
+  }
+}
+
+// 停止所有相機
+async function stopAllCameras() {
+  if (isBorrowCameraOn && qrBorrow) {
+    try { await qrBorrow.stop(); } catch (e) {}
+    isBorrowCameraOn = false;
+    const b = document.getElementById("btn-toggle-scanner-borrow");
+    if (b) { b.innerText = "開啟鏡頭"; b.classList.remove("camera-active"); }
+  }
+  if (isReturnCameraOn && qrReturn) {
+    try { await qrReturn.stop(); } catch (e) {}
+    isReturnCameraOn = false;
+    const b = document.getElementById("btn-toggle-scanner-return");
+    if (b) { b.innerText = "開啟鏡頭"; b.classList.remove("camera-active"); }
+  }
+}
+
+// === 6. 身分切換 ===
 function switchRole(role) {
   currentRole = role;
   const btnStudent = document.getElementById("role-btn-student");
@@ -156,40 +235,48 @@ function switchRole(role) {
   }
 }
 
-// === 7. 分頁切換 (借用登記 vs 歸還清單) ===
-function switchTab(tab) {
-  activeTab = tab;
-  const navBorrow = document.getElementById("nav-borrow");
-  const navReturn = document.getElementById("nav-return");
-  const pageBorrow = document.getElementById("page-borrow");
-  const pageReturn = document.getElementById("page-return");
+// === 7. 主分頁切換 (借用 / 歸還 / 借還清單) ===
+function switchMainTab(tab) {
+  activeMainTab = tab;
+  stopAllCameras();
+
+  document.getElementById("nav-borrow")?.classList.toggle("active", tab === "borrow");
+  document.getElementById("nav-return")?.classList.toggle("active", tab === "return");
+  document.getElementById("nav-records")?.classList.toggle("active", tab === "records");
+
+  document.getElementById("page-borrow")?.classList.toggle("is-hidden", tab !== "borrow");
+  document.getElementById("page-return")?.classList.toggle("is-hidden", tab !== "return");
+  document.getElementById("page-records")?.classList.toggle("is-hidden", tab !== "records");
 
   if (tab === "borrow") {
-    navBorrow?.classList.add("active");
-    navReturn?.classList.remove("active");
-    pageBorrow?.classList.remove("is-hidden");
-    pageReturn?.classList.add("is-hidden");
-
     setTimeout(() => {
       const c = document.getElementById("canvas-borrow-sign");
       borrowPad = initSignatureCanvas(c, borrowPad);
     }, 150);
-  } else {
-    navReturn?.classList.add("active");
-    navBorrow?.classList.remove("active");
-    pageReturn?.classList.remove("is-hidden");
-    pageBorrow?.classList.add("is-hidden");
-
-    fetchUnreturnedList();
+  } else if (tab === "return") {
+    setTimeout(() => {
+      const c = document.getElementById("canvas-return-sign");
+      returnPad = initSignatureCanvas(c, returnPad);
+    }, 150);
+    fetchReturnPickList();
+  } else if (tab === "records") {
+    fetchAllRecords();
   }
 }
 
-// === 8. 借出登記送出 ===
+// === 8. 清單次分頁切換 (已借未還 VS 已歸還清冊) ===
+function switchRecordsSubTab(subTab) {
+  activeRecordsSubTab = subTab;
+  document.getElementById("subnav-unreturned")?.classList.toggle("active", subTab === "unreturned");
+  document.getElementById("subnav-returned")?.classList.toggle("active", subTab === "returned");
+
+  document.getElementById("subpage-unreturned")?.classList.toggle("is-hidden", subTab !== "unreturned");
+  document.getElementById("subpage-returned")?.classList.toggle("is-hidden", subTab !== "returned");
+}
+
+// === 9. 模組 1：借用登記送出 ===
 async function submitBorrowRecord() {
-  if (!dbClient) {
-    alert("尚未設定 Supabase 連線資訊！");
-    return;
-  }
+  if (!dbClient) return alert("未設定 Supabase 連線！");
 
   const itemCode = document.getElementById("borrow-item-code")?.value.trim() || "";
   const itemName = document.getElementById("borrow-item-name")?.value.trim() || "";
@@ -209,22 +296,14 @@ async function submitBorrowRecord() {
     departmentOrClass = document.getElementById("borrow-dept")?.value || "";
   }
 
-  if (!itemCode || !borrowerName) {
-    alert("請填寫物品條碼代碼與借用人姓名！");
-    return;
-  }
-
-  if (!borrowPad || borrowPad.isEmpty()) {
-    alert("借用人必須手寫簽名！");
-    return;
-  }
+  if (!itemCode) return alert("請先開啟鏡頭掃描物品 QR Code 代碼！");
+  if (!borrowerName) return alert("請填寫借用人姓名！");
+  if (!borrowPad || borrowPad.isEmpty()) return alert("借用人必須手寫簽名！");
 
   const signData = borrowPad.toDataURL("image/png");
   const btn = document.getElementById("btn-submit-borrow");
-  if (btn) {
-    btn.disabled = true;
-    btn.innerText = "寫入資料庫中...";
-  }
+  btn.disabled = true;
+  btn.innerText = "寫入中...";
 
   const { error } = await dbClient.from("borrow_records").insert([
     {
@@ -241,16 +320,14 @@ async function submitBorrowRecord() {
     }
   ]);
 
-  if (btn) {
-    btn.disabled = false;
-    btn.innerText = "送出借用登記";
-  }
+  btn.disabled = false;
+  btn.innerText = "確認借出並送出登記";
 
   if (error) {
-    console.error("Supabase 寫入錯誤:", error);
-    alert("登記失敗，請檢查網路連線！");
+    console.error("借用失敗:", error);
+    alert("登記失敗，請檢查網路！");
   } else {
-    alert("借用登記成功！");
+    alert("借用手續完成！");
     document.getElementById("borrow-item-code").value = "";
     document.getElementById("borrow-item-name").value = "";
     document.getElementById("borrow-quantity").value = "1";
@@ -263,16 +340,12 @@ async function submitBorrowRecord() {
   }
 }
 
-// === 9. 未歸還清單與歸還作業 ===
-async function fetchUnreturnedList() {
-  const tbody = document.getElementById("unreturned-tbody");
-  if (!tbody) return;
-  tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#94a3b8;">載入中...</td></tr>`;
+// === 10. 模組 2：歸還登記邏輯 ===
 
-  if (!dbClient) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#ef4444;">未配置 Supabase 金鑰</td></tr>`;
-    return;
-  }
+// 讀取待歸還清單供挑選
+async function fetchReturnPickList() {
+  const tbody = document.getElementById("return-pick-tbody");
+  if (!tbody || !dbClient) return;
 
   const { data, error } = await dbClient
     .from("borrow_records")
@@ -280,89 +353,62 @@ async function fetchUnreturnedList() {
     .eq("is_returned", false)
     .order("borrow_time", { ascending: false });
 
-  if (error) {
-    console.error("清單讀取失敗:", error);
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#ef4444;">讀取失敗</td></tr>`;
+  if (error || !data) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:#ef4444;">載入失敗</td></tr>`;
     return;
   }
 
-  if (!data || data.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:24px; color:#94a3b8;">目前無借出中的物品</td></tr>`;
+  cachedUnreturnedRecords = data;
+
+  if (data.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:#94a3b8;">無借出中的物品</td></tr>`;
     return;
   }
 
-  tbody.innerHTML = data.map(row => {
-    const d = new Date(row.borrow_time).toLocaleDateString("zh-TW", {
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
-    });
-
-    return `
-      <tr>
-        <td style="font-family: monospace; font-size: 0.75rem; color: #64748b;">${d}</td>
-        <td><b>${row.item_name || "無品名"}</b> <span style="font-size: 0.75rem; color: #94a3b8;">(${row.item_code})</span></td>
-        <td>${row.borrower_name}</td>
-        <td style="font-size: 0.75rem; color: #64748b;">${row.department_class || "-"}</td>
-        <td><b>${row.quantity}</b></td>
-        <td style="text-align: right;">
-          <button onclick="openReturnModal('${row.id}', '${row.item_name || row.item_code}', '${row.borrower_name}')" class="btn-sm" style="background-color: #059669; color: white; border: none;">
-            辦理歸還
-          </button>
-        </td>
-      </tr>
-    `;
-  }).join("");
+  tbody.innerHTML = data.map(r => `
+    <tr>
+      <td><b>${r.item_name || "無品名"}</b> <span style="font-size:0.75rem;color:#94a3b8;">(${r.item_code})</span></td>
+      <td>${r.borrower_name}</td>
+      <td style="text-align: right;">
+        <button onclick='selectRecordForReturn(${JSON.stringify(r)})' class="btn-sm" style="background-color:#2563eb;color:#fff;border:none;">選擇</button>
+      </td>
+    </tr>
+  `).join("");
 }
 
-window.openReturnModal = function(id, itemName, borrowerName) {
-  selectedReturnRecordId = id;
-  const info = document.getElementById("modal-item-info");
-  if (info) info.innerHTML = `<b>品名/條碼:</b> ${itemName} ｜ <b>借用人:</b> ${borrowerName}`;
-  
-  const pName = document.getElementById("return-person-name");
-  if (pName) pName.value = borrowerName;
-  
-  const notes = document.getElementById("return-notes");
-  if (notes) notes.value = "";
+// 點選或掃描選定歸還物品
+window.selectRecordForReturn = function(record) {
+  selectedBorrowRecord = record;
+  const infoBox = document.getElementById("return-active-info");
+  const d = new Date(record.borrow_time).toLocaleDateString("zh-TW", { month:"numeric", day:"numeric", hour:"2-digit", minute:"2-digit" });
 
-  document.getElementById("modal-return")?.classList.remove("is-hidden");
+  infoBox.innerHTML = `
+    <div>
+      <div><b>已選定：</b> ${record.item_name || "無品名"} (${record.item_code}) × ${record.quantity}</div>
+      <div style="font-size:0.75rem;color:#475569;margin-top:2px;">借用人: <b>${record.borrower_name}</b> (${record.department_class || "-"}) ｜ 借出時間: ${d}</div>
+    </div>
+  `;
 
-  setTimeout(() => {
-    const c = document.getElementById("canvas-return-sign");
-    returnPad = initSignatureCanvas(c, returnPad);
-  }, 150);
+  document.getElementById("return-borrower-name").value = record.borrower_name;
+  document.getElementById("return-notes").value = "";
+  if (returnPad) returnPad.clear();
 };
 
-function closeReturnModal() {
-  document.getElementById("modal-return")?.classList.add("is-hidden");
-  selectedReturnRecordId = null;
-  if (returnPad) returnPad.clear();
-}
+// 送出歸還存檔
+async function submitReturnConfirm() {
+  if (!selectedBorrowRecord) return alert("請先選定欲歸還之物品紀錄！");
+  if (!dbClient) return alert("資料庫尚未連接！");
 
-async function submitReturnRecord() {
-  if (!selectedReturnRecordId || !dbClient) return;
-
-  const returnName = document.getElementById("return-person-name")?.value.trim() || "";
+  const returnName = document.getElementById("return-borrower-name")?.value.trim() || "";
   const notes = document.getElementById("return-notes")?.value.trim() || "";
 
-  if (!returnName) {
-    alert("請輸入歸還人姓名！");
-    return;
-  }
-
-  if (!returnPad || returnPad.isEmpty()) {
-    alert("歸還人必須手寫簽名！");
-    return;
-  }
+  if (!returnName) return alert("請填寫歸還人姓名！");
+  if (!returnPad || returnPad.isEmpty()) return alert("歸還人必須手寫簽名！");
 
   const signData = returnPad.toDataURL("image/png");
   const btn = document.getElementById("btn-confirm-return");
-  if (btn) {
-    btn.disabled = true;
-    btn.innerText = "存檔中...";
-  }
+  btn.disabled = true;
+  btn.innerText = "歸還存檔中...";
 
   const { error } = await dbClient
     .from("borrow_records")
@@ -373,67 +419,173 @@ async function submitReturnRecord() {
       return_sign: signData,
       return_notes: notes
     })
-    .eq("id", selectedReturnRecordId);
+    .eq("id", selectedBorrowRecord.id);
 
-  if (btn) {
-    btn.disabled = false;
-    btn.innerText = "確認歸還存檔";
-  }
+  btn.disabled = false;
+  btn.innerText = "確認無誤，辦理歸還存檔";
 
   if (error) {
-    console.error("歸還失敗:", error);
-    alert("歸還失敗，請檢查網路連線！");
+    alert("歸還失敗，請檢查網路！");
   } else {
-    alert("歸還手續完成！");
-    closeReturnModal();
-    fetchUnreturnedList();
+    alert("物品已順利完成歸還手續！");
+    selectedBorrowRecord = null;
+    document.getElementById("return-active-info").innerHTML = `請先由左側「鏡頭掃描條碼」或「點選待還物品」`;
+    document.getElementById("return-borrower-name").value = "";
+    document.getElementById("return-notes").value = "";
+    returnPad.clear();
+    fetchReturnPickList();
   }
 }
 
-// === 10. 綁定監聽器 (獨立掛載，互不影響) ===
-document.addEventListener("DOMContentLoaded", () => {
-  console.log("DOM 載入完成，正在綁定事件...");
+// === 11. 模組 3：借還清冊載入與簽名查閱 ===
+async function fetchAllRecords() {
+  if (!dbClient) return;
 
-  // 1. 提示音量
+  const unreturnedTbody = document.getElementById("table-unreturned-body");
+  const returnedTbody = document.getElementById("table-returned-body");
+
+  unreturnedTbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:16px;color:#94a3b8;">載入中...</td></tr>`;
+  returnedTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:16px;color:#94a3b8;">載入中...</td></tr>`;
+
+  const { data, error } = await dbClient
+    .from("borrow_records")
+    .select("*")
+    .order("borrow_time", { ascending: false });
+
+  if (error || !data) {
+    unreturnedTbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#ef4444;">資料讀取失敗</td></tr>`;
+    returnedTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#ef4444;">資料讀取失敗</td></tr>`;
+    return;
+  }
+
+  const unreturnedList = data.filter(r => !r.is_returned);
+  const returnedList = data.filter(r => r.is_returned);
+
+  // 更新計數
+  document.getElementById("count-unreturned").innerText = unreturnedList.length;
+  document.getElementById("count-returned").innerText = returnedList.length;
+
+  // 1. 渲染 已借未還
+  if (unreturnedList.length === 0) {
+    unreturnedTbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:#94a3b8;">目前所有借用物品皆已歸還</td></tr>`;
+  } else {
+    unreturnedTbody.innerHTML = unreturnedList.map(r => {
+      const bDate = new Date(r.borrow_time).toLocaleDateString("zh-TW", { month:"numeric", day:"numeric", hour:"2-digit", minute:"2-digit" });
+      return `
+        <tr>
+          <td style="font-family:monospace;font-size:0.75rem;color:#64748b;">${bDate}</td>
+          <td><b>${r.item_name || "無品名"}</b> <span style="font-size:0.75rem;color:#94a3b8;">(${r.item_code})</span></td>
+          <td><b>${r.quantity}</b></td>
+          <td>${r.borrower_name}</td>
+          <td style="font-size:0.75rem;color:#64748b;">${r.department_class || "-"}</td>
+          <td style="font-size:0.8rem;color:#64748b;">${r.purpose || "-"}</td>
+          <td style="text-align:right;">
+            <button onclick='viewSignModal(${JSON.stringify(r)})' class="btn-sm">查看簽名</button>
+          </td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  // 2. 渲染 已歸還清冊
+  if (returnedList.length === 0) {
+    returnedTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px;color:#94a3b8;">目前尚無已歸還紀錄</td></tr>`;
+  } else {
+    returnedTbody.innerHTML = returnedList.map(r => {
+      const bDate = new Date(r.borrow_time).toLocaleDateString("zh-TW", { month:"numeric", day:"numeric", hour:"2-digit", minute:"2-digit" });
+      const rDate = r.return_time ? new Date(r.return_time).toLocaleDateString("zh-TW", { month:"numeric", day:"numeric", hour:"2-digit", minute:"2-digit" }) : "-";
+      return `
+        <tr>
+          <td style="font-family:monospace;font-size:0.75rem;color:#64748b;">${bDate}</td>
+          <td style="font-family:monospace;font-size:0.75rem;color:#059669;">${rDate}</td>
+          <td><b>${r.item_name || "無品名"}</b> <span style="font-size:0.75rem;color:#94a3b8;">(${r.item_code})</span></td>
+          <td><b>${r.quantity}</b></td>
+          <td>${r.borrower_name} <span style="font-size:0.75rem;color:#94a3b8;">(${r.department_class || "-"})</span></td>
+          <td style="color:#059669;font-weight:600;">${r.return_name || "-"}</td>
+          <td style="font-size:0.8rem;color:#64748b;">${r.return_notes || "-"}</td>
+          <td style="text-align:right;">
+            <button onclick='viewSignModal(${JSON.stringify(r)})' class="btn-sm">借/還簽名</button>
+          </td>
+        </tr>
+      `;
+    }).join("");
+  }
+}
+
+// 彈窗檢視簽名圖片
+window.viewSignModal = function(record) {
+  const modal = document.getElementById("modal-view-signs");
+  const content = document.getElementById("sign-view-content");
+
+  content.innerHTML = `
+    <div class="sign-card">
+      <h4>借用簽名 (${record.borrower_name})</h4>
+      ${record.borrow_sign ? `<img src="${record.borrow_sign}" alt="借用簽名" />` : `<div style="padding:20px;color:#cbd5e1;">無簽名資料</div>`}
+    </div>
+    <div class="sign-card">
+      <h4>歸還簽名 (${record.return_name || "未歸還"})</h4>
+      ${record.return_sign ? `<img src="${record.return_sign}" alt="歸還簽名" />` : `<div style="padding:20px;color:#cbd5e1;">尚未歸還</div>`}
+    </div>
+  `;
+
+  modal.classList.remove("is-hidden");
+};
+
+// === 12. 事件監聽初始化 ===
+document.addEventListener("DOMContentLoaded", () => {
+  // 提示音
   const beepVol = document.getElementById("beep-volume");
   if (beepVol) {
     beepVol.value = beeper.volume;
     beepVol.addEventListener("input", (e) => beeper.setVolume(e.target.value));
   }
 
-  // 2. 身分切換 (學生 / 教職員)
+  // 主導航切換
+  document.getElementById("nav-borrow")?.addEventListener("click", () => switchMainTab("borrow"));
+  document.getElementById("nav-return")?.addEventListener("click", () => switchMainTab("return"));
+  document.getElementById("nav-records")?.addEventListener("click", () => switchMainTab("records"));
+
+  // 清單次導航切換
+  document.getElementById("subnav-unreturned")?.addEventListener("click", () => switchRecordsSubTab("unreturned"));
+  document.getElementById("subnav-returned")?.addEventListener("click", () => switchRecordsSubTab("returned"));
+
+  // 身分切換
   document.getElementById("role-btn-student")?.addEventListener("click", () => switchRole("student"));
   document.getElementById("role-btn-staff")?.addEventListener("click", () => switchRole("staff"));
 
-  // 3. 分頁切換 (借用 / 歸還)
-  document.getElementById("nav-borrow")?.addEventListener("click", () => switchTab("borrow"));
-  document.getElementById("nav-return")?.addEventListener("click", () => switchTab("return"));
+  // 鏡頭開關
+  document.getElementById("btn-toggle-scanner-borrow")?.addEventListener("click", toggleBorrowScanner);
+  document.getElementById("btn-toggle-scanner-return")?.addEventListener("click", toggleReturnScanner);
 
-  // 4. 簽名板按鈕
+  // 簽名板按鈕
   document.getElementById("btn-clear-signature")?.addEventListener("click", () => borrowPad && borrowPad.clear());
   document.getElementById("btn-clear-return-signature")?.addEventListener("click", () => returnPad && returnPad.clear());
 
-  // 5. 表單按鈕
+  // 表單操作按鈕
   document.getElementById("btn-submit-borrow")?.addEventListener("click", submitBorrowRecord);
-  document.getElementById("btn-refresh-list")?.addEventListener("click", fetchUnreturnedList);
-  document.getElementById("btn-cancel-return")?.addEventListener("click", closeReturnModal);
-  document.getElementById("btn-close-modal")?.addEventListener("click", closeReturnModal);
-  document.getElementById("btn-confirm-return")?.addEventListener("click", submitReturnRecord);
+  document.getElementById("btn-confirm-return")?.addEventListener("click", submitReturnConfirm);
+  document.getElementById("btn-refresh-return-pick")?.addEventListener("click", fetchReturnPickList);
+  document.getElementById("btn-refresh-records")?.addEventListener("click", fetchAllRecords);
 
-  // 6. 延遲掛載簽名板與掃描器
+  // 彈窗關閉
+  document.getElementById("btn-close-sign-modal")?.addEventListener("click", () => {
+    document.getElementById("modal-view-signs")?.classList.add("is-hidden");
+  });
+
+  // 初始借用簽名板
   setTimeout(() => {
     const c = document.getElementById("canvas-borrow-sign");
     borrowPad = initSignatureCanvas(c);
-    initQrScanner();
   }, 200);
 
-  // 7. 螢幕旋轉適配
+  // iPad 旋轉適配
   window.addEventListener("resize", () => {
-    if (activeTab === "borrow") {
+    if (activeMainTab === "borrow") {
       const c = document.getElementById("canvas-borrow-sign");
       borrowPad = initSignatureCanvas(c, borrowPad);
+    } else if (activeMainTab === "return") {
+      const c = document.getElementById("canvas-return-sign");
+      returnPad = initSignatureCanvas(c, returnPad);
     }
   });
-
-  console.log("所有元件事件綁定完成！");
 });
