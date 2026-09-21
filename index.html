@@ -1,642 +1,221 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>物品借還管理系統</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>物品與鑰匙借還登記系統</title>
   
-  <!-- 第三方套件：QR 掃描、簽名板、Supabase JS Client -->
+  <!-- iPad 全螢幕支援 -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <!-- 自訂樣式表 -->
+  <link rel="stylesheet" href="style.css" />
+
+  <!-- 外部必要核心庫 -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      -webkit-touch-callout: none;
-    }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang TC", "Noto Sans TC", sans-serif;
-      background-color: #f3f4f6;
-      color: #1f2937;
-      padding: 12px 16px;
-    }
-    .app-container {
-      max-width: 960px;
-      margin: 0 auto;
-    }
-    
-    .view-section {
-      display: none;
-    }
-    .view-section.active {
-      display: block;
-    }
-
-    .top-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-    }
-    .top-bar h2 {
-      font-size: 1.25rem;
-      font-weight: 700;
-    }
-    .btn-back {
-      background: #4b5563;
-      color: #fff;
-      border: none;
-      padding: 6px 14px;
-      border-radius: 6px;
-      font-size: 0.88rem;
-      cursor: pointer;
-    }
-
-    .status-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
-      padding: 6px 12px;
-      background: #ffffff;
-      border-radius: 6px;
-      font-size: 0.8rem;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-    .status-dot {
-      display: inline-block;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      margin-right: 6px;
-      background-color: #9ca3af;
-    }
-    .status-dot.online { background-color: #16a34a; }
-    .status-dot.offline { background-color: #dc2626; }
-
-    /* 首頁選單 */
-    .home-header {
-      text-align: center;
-      margin: 24px 0 20px;
-    }
-    .home-header h1 {
-      font-size: 1.8rem;
-      font-weight: 800;
-      color: #111827;
-      margin-bottom: 6px;
-    }
-    .menu-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-      margin-top: 16px;
-    }
-    .menu-card {
-      background: #ffffff;
-      border-radius: 14px;
-      padding: 32px 16px;
-      text-align: center;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-      border: 2px solid transparent;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 8px;
-    }
-    .menu-card:active { transform: scale(0.98); }
-    .menu-card.btn-borrow { border-color: #2563eb; background: #eff6ff; }
-    .menu-card.btn-return { border-color: #16a34a; background: #f0fdf4; }
-    .menu-card.btn-details { border-color: #4b5563; background: #f9fafb; }
-    .menu-card h3 { font-size: 1.3rem; font-weight: 700; }
-    .menu-card p { font-size: 0.85rem; color: #6b7280; }
-
-    /* 表單卡片 */
-    .card-panel {
-      background: #ffffff;
-      border-radius: 10px;
-      padding: 14px 18px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-    }
-
-    /* 頂部掃描與物品橫向列 */
-    .scan-asset-row {
-      display: flex;
-      gap: 14px;
-      align-items: center;
-      margin-bottom: 12px;
-    }
-    .scanner-box {
-      width: 130px;
-      height: 130px;
-      background: #111827;
-      border-radius: 10px;
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #9ca3af;
-      font-size: 0.85rem;
-      border: 2px solid #e5e7eb;
-      flex-shrink: 0;
-    }
-    .scanner-box video {
-      object-fit: cover !important;
-      width: 100% !important;
-      height: 100% !important;
-      border-radius: 8px;
-    }
-    .asset-input-wrap {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .scan-ctrl {
-      display: flex;
-      gap: 6px;
-    }
-    .btn-action, .btn-secondary {
-      color: #fff;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 0.82rem;
-      cursor: pointer;
-    }
-    .btn-action { background: #2563eb; }
-    .btn-secondary { background: #4b5563; }
-
-    /* 身分單行 Grid 排版 */
-    .identity-row {
-      display: grid;
-      grid-template-columns: 140px 1fr;
-      gap: 12px;
-      align-items: center;
-      margin-bottom: 10px;
-    }
-    .role-selection {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      height: 38px;
-    }
-    .role-option {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-    }
-    .role-option input[type="radio"] {
-      width: 18px;
-      height: 18px;
-    }
-
-    /* 學生欄位：班級 + 座號 + 借用人姓名 */
-    .fields-student {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1.5fr;
-      gap: 10px;
-    }
-    /* 教職員欄位：處室單位 + 借用人姓名 */
-    .fields-teacher {
-      display: none;
-      grid-template-columns: 1.2fr 1.5fr;
-      gap: 10px;
-    }
-
-    /* 時間、數量、用途排版 */
-    .grid-row-meta {
-      display: grid;
-      grid-template-columns: 1.4fr 0.7fr 2.5fr;
-      gap: 10px;
-      margin-bottom: 10px;
-    }
-
-    /* 下半部：左邊簽名板，右邊注意事項與按鈕 */
-    .bottom-split {
-      display: grid;
-      grid-template-columns: 1.2fr 1fr;
-      gap: 16px;
-      align-items: end;
-      margin-top: 6px;
-    }
-
-    label {
-      display: block;
-      font-size: 0.82rem;
-      font-weight: 600;
-      color: #374151;
-      margin-bottom: 4px;
-    }
-    input, textarea, select {
-      width: 100%;
-      padding: 8px 10px;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      font-size: 0.92rem;
-      background: #fff;
-    }
-    input:read-only, textarea:read-only {
-      background: #f3f4f6;
-      color: #6b7280;
-    }
-
-    /* 簽名框樣式 */
-    .sign-box {
-      border: 1.5px dashed #9ca3af;
-      background: #fff;
-      border-radius: 6px;
-      height: 120px;
-      width: 100%;
-      position: relative;
-      touch-action: none !important;
-      -webkit-user-select: none;
-      user-select: none;
-    }
-    canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-      touch-action: none !important;
-    }
-    .sign-meta {
-      display: flex;
-      justify-content: space-between;
-      margin-top: 4px;
-      font-size: 0.75rem;
-      color: #6b7280;
-    }
-    .btn-clear {
-      background: #e5e7eb;
-      border: none;
-      padding: 3px 8px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.75rem;
-    }
-
-    .notice-box {
-      font-size: 0.76rem;
-      color: #6b7280;
-      line-height: 1.4;
-      margin-bottom: 10px;
-    }
-    .btn-submit {
-      width: 100%;
-      padding: 12px;
-      background: #16a34a;
-      color: #fff;
-      border: none;
-      border-radius: 6px;
-      font-size: 1.05rem;
-      font-weight: 700;
-      cursor: pointer;
-    }
-    .btn-submit.btn-blue {
-      background: #2563eb;
-    }
-
-    /* 歸還核對小卡 */
-    .borrow-ref-panel {
-      background: #eff6ff;
-      border: 1px solid #bfdbfe;
-      border-radius: 6px;
-      padding: 8px 12px;
-      margin-bottom: 10px;
-    }
-    .borrow-ref-panel h4 {
-      font-size: 0.88rem;
-      color: #1e40af;
-      margin-bottom: 4px;
-    }
-    .ref-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 4px;
-      font-size: 0.82rem;
-      color: #1e3a8a;
-    }
-
-    /* 表格樣式 */
-    .tabs {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 12px;
-    }
-    .tab-btn {
-      flex: 1;
-      padding: 8px;
-      text-align: center;
-      background: #e5e7eb;
-      border: none;
-      border-radius: 6px;
-      font-size: 0.9rem;
-      font-weight: 600;
-      cursor: pointer;
-      color: #4b5563;
-    }
-    .tab-btn.active {
-      background: #2563eb;
-      color: #ffffff;
-    }
-    .data-table-container {
-      overflow-x: auto;
-      background: #ffffff;
-      border-radius: 6px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.85rem;
-      text-align: left;
-    }
-    th, td {
-      padding: 10px 12px;
-      border-bottom: 1px solid #e5e7eb;
-    }
-    th {
-      background: #f9fafb;
-      font-weight: 600;
-      color: #374151;
-    }
-    .sign-thumbnail {
-      width: 50px;
-      height: 24px;
-      object-fit: contain;
-      border: 1px solid #d1d5db;
-      background: #fff;
-      border-radius: 4px;
-    }
-    .status-badge {
-      display: inline-block;
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 0.72rem;
-      font-weight: 600;
-    }
-    .status-borrowed { background: #fee2e2; color: #991b1b; }
-    .status-returned { background: #dcfce7; color: #166534; }
-  </style>
 </head>
 <body>
 
-  <div class="app-container">
-
-    <!-- 頂部連線狀態列 -->
-    <div class="status-bar">
-      <div>
-        <span class="status-dot" id="dbStatusDot"></span>
-        <span id="dbStatusText">連線檢測中...</span>
-      </div>
-      <div>
-        <button class="btn-clear" onclick="syncLocalRecords()">同步離線資料</button>
-      </div>
+  <!-- 頂部導航列 -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="status-dot"></div>
+      <h1>物品 / 鑰匙登記系統</h1>
     </div>
-
-    <!-- 1. 入口首頁 -->
-    <section id="viewHome" class="view-section active">
-      <div class="home-header">
-        <h1>物品借還管理系統</h1>
-        <p>請依現場辦理需求點選對應功能</p>
+    
+    <div class="header-right">
+      <!-- 提示音量調整 -->
+      <div class="volume-box">
+        <label for="beep-volume">提示音量</label>
+        <input id="beep-volume" type="range" min="0" max="1" step="0.05" value="0.5" />
       </div>
 
-      <div class="menu-grid">
-        <div class="menu-card btn-borrow" onclick="navigateTo('viewBorrow')">
-          <h3 style="color: #2563eb;">借用登記</h3>
-          <p>掃描條碼・身分登記・簽名</p>
-        </div>
-        <div class="menu-card btn-return" onclick="navigateTo('viewReturn')">
-          <h3 style="color: #16a34a;">歸還登記</h3>
-          <p>掃描條碼・核對資訊結案</p>
-        </div>
-        <div class="menu-card btn-details" onclick="navigateTo('viewDetails')">
-          <h3 style="color: #374151;">詳細資料</h3>
-          <p>已借未還・借還歷程清單</p>
-        </div>
-      </div>
-    </section>
+      <!-- 分頁切換 -->
+      <nav class="tab-nav">
+        <button id="nav-borrow" class="tab-btn active">借用登記</button>
+        <button id="nav-return" class="tab-btn">歸還清單</button>
+      </nav>
+    </div>
+  </header>
 
-    <!-- 2. 借用專用介面 -->
-    <section id="viewBorrow" class="view-section">
-      <div class="top-bar">
-        <h2>辦理物品借用</h2>
-        <button class="btn-back" onclick="navigateTo('viewHome')">返回首頁</button>
-      </div>
+  <!-- 主內容容器 -->
+  <main class="main-container">
+    
+    <!-- 分頁 1：借用登記表單 -->
+    <div id="page-borrow" class="page-view flex-row">
+      
+      <!-- 左側：掃描與物品代碼 -->
+      <section class="card left-pane">
+        <div>
+          <div class="card-header">
+            <h2>1. 物品條碼掃描</h2>
+            <button id="btn-toggle-scanner" class="btn-sm">切換鏡頭</button>
+          </div>
 
-      <div class="card-panel">
-        <!-- 頂部掃碼與物品 -->
-        <div class="scan-asset-row">
-          <div class="scanner-box" id="readerBorrow">相機待機中</div>
-          <div class="asset-input-wrap">
-            <label>借出物品 (Asset ID / 名稱)</label>
-            <input type="text" id="borrowItemId" placeholder="← 請點開啟鏡頭對準條碼，或點模擬掃碼" readonly>
-            <div class="scan-ctrl">
-              <button type="button" class="btn-action" id="btnCamBorrow" onclick="toggleCamera('borrow')">開啟後鏡頭掃碼</button>
-              <button type="button" class="btn-secondary" onclick="mockScanBorrow('K01')">模擬掃碼 [K01]</button>
+          <!-- 鏡頭預覽區 -->
+          <div id="qr-reader" class="scanner-box"></div>
+
+          <div class="form-group-stack">
+            <div class="form-field">
+              <label>物品代碼 / 條碼編號</label>
+              <input id="borrow-item-code" type="text" placeholder="點擊掃描或手動輸入" class="input-mono" />
+            </div>
+            
+            <div class="form-row-2">
+              <div class="form-field">
+                <label>物品品名</label>
+                <input id="borrow-item-name" type="text" placeholder="例: 筆電充電車 / 鑰匙" />
+              </div>
+              <div class="form-field">
+                <label>借出數量</label>
+                <input id="borrow-quantity" type="number" min="1" value="1" />
+              </div>
             </div>
           </div>
         </div>
 
-        <!-- 身分選擇與對應欄位 -->
-        <div class="identity-row">
-          <div>
-            <label>借用人身分</label>
-            <div class="role-selection">
-              <label class="role-option">
-                <input type="radio" name="borrowRole" value="student" checked onchange="handleRoleChange()">
-                學生
-              </label>
-              <label class="role-option">
-                <input type="radio" name="borrowRole" value="teacher" onchange="handleRoleChange()">
-                教職員
-              </label>
-            </div>
+        <div class="tip-text">對準物品條碼即可自動讀取並播放嗶聲</div>
+      </section>
+
+      <!-- 右側：借用人資訊與簽名 -->
+      <section class="card right-pane">
+        <div class="form-group-stack">
+          <h2>2. 借用人身分資料</h2>
+
+          <!-- 身分切換按鈕 -->
+          <div class="role-switch">
+            <button id="role-btn-student" type="button" class="role-btn active">學生登記</button>
+            <button id="role-btn-staff" type="button" class="role-btn">教職員登記</button>
           </div>
 
-          <!-- 學生專屬欄位 -->
-          <div class="fields-student" id="boxStudentFields">
-            <div>
+          <!-- 學生容器 (預設顯示) -->
+          <div id="container-student" class="form-row-3">
+            <div class="form-field">
               <label>班級</label>
-              <input type="text" id="borrowStudentClass" placeholder="例：資三甲">
+              <input id="borrow-class" type="text" placeholder="例: 801" />
             </div>
-            <div>
+            <div class="form-field">
               <label>座號</label>
-              <input type="number" id="borrowStudentSeat" placeholder="例：08" min="1">
+              <input id="borrow-seat" type="number" placeholder="例: 15" />
             </div>
-            <div>
+            <div class="form-field">
               <label>借用人姓名</label>
-              <input type="text" id="borrowStudentName" placeholder="請輸入學生姓名">
+              <input id="borrow-name-student" type="text" placeholder="學生全名" />
             </div>
           </div>
 
-          <!-- 教職員專屬欄位 -->
-          <div class="fields-teacher" id="boxTeacherFields">
-            <div>
-              <label>處室單位</label>
-              <select id="borrowTeacherDept">
+          <!-- 教職員容器 (預設隱藏) -->
+          <div id="container-staff" class="form-row-2 is-hidden">
+            <div class="form-field">
+              <label>處室 / 科別</label>
+              <select id="borrow-dept">
                 <option value="教務處">教務處</option>
                 <option value="學務處">學務處</option>
                 <option value="總務處">總務處</option>
-                <option value="輔導處">輔導處</option>
-                <option value="人事室">人事室</option>
-                <option value="會計室">會計室</option>
+                <option value="輔導室">輔導室</option>
+                <option value="圖書館">圖書館</option>
+                <option value="專科教室">專科教室</option>
                 <option value="其他">其他</option>
               </select>
             </div>
-            <div>
-              <label>借用人姓名</label>
-              <input type="text" id="borrowTeacherName" placeholder="請輸入教職員姓名">
+            <div class="form-field">
+              <label>教師 / 職員姓名</label>
+              <input id="borrow-name-staff" type="text" placeholder="教職員全名" />
+            </div>
+          </div>
+
+          <!-- 借用用途 -->
+          <div class="form-field">
+            <label>借用用途說明 (選填)</label>
+            <input id="borrow-purpose" type="text" placeholder="例: 自然分組實驗 / 資訊培訓" />
+          </div>
+
+          <!-- 借用電子簽名 -->
+          <div class="form-field">
+            <div class="sign-header">
+              <label>借用人手寫簽名</label>
+              <button id="btn-clear-signature" type="button" class="btn-text-danger">清除簽名</button>
+            </div>
+            <div class="canvas-wrapper">
+              <canvas id="canvas-borrow-sign" class="signature-canvas"></canvas>
             </div>
           </div>
         </div>
 
-        <!-- 時間、數量、用途說明 -->
-        <div class="grid-row-meta">
-          <div>
-            <label>借用日期 / 時間</label>
-            <input type="text" id="borrowTime" readonly>
-          </div>
-          <div>
-            <label>數量</label>
-            <input type="number" id="borrowQty" value="1" min="1">
-          </div>
-          <div>
-            <label>用途說明</label>
-            <input type="text" id="borrowPurpose" placeholder="例：活動排練、課程教學">
-          </div>
+        <button id="btn-submit-borrow" class="btn-primary">送出借用登記</button>
+      </section>
+
+    </div>
+
+    <!-- 分頁 2：歸還清單 (預設隱藏) -->
+    <div id="page-return" class="page-view card is-hidden">
+      <div class="list-header">
+        <div>
+          <h2>借出中物品清單</h2>
+          <span class="sub-text">點選該項進行簽名歸還確認</span>
         </div>
-
-        <!-- 下半部：左邊簽名、右邊確認 -->
-        <div class="bottom-split">
-          <div>
-            <label>借用人簽名</label>
-            <div class="sign-box">
-              <canvas id="padBorrow"></canvas>
-            </div>
-            <div class="sign-meta">
-              <span>請借用人於上方框內手寫簽名</span>
-              <button type="button" class="btn-clear" onclick="clearPad('borrow')">清除重簽</button>
-            </div>
-          </div>
-
-          <div>
-            <div class="notice-box">
-              ※ 請妥善保管借出物品，用畢後請儘速歸還。<br>
-              ※ 如有遺失或損壞需擔負損害賠償責任。
-            </div>
-            <button class="btn-submit btn-blue" onclick="submitBorrow()">確認借出登記</button>
-          </div>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- 3. 歸還專用介面 -->
-    <section id="viewReturn" class="view-section">
-      <div class="top-bar">
-        <h2>辦理物品歸還</h2>
-        <button class="btn-back" onclick="navigateTo('viewHome')">返回首頁</button>
+        <button id="btn-refresh-list" class="btn-sm">重新整理</button>
       </div>
 
-      <div class="card-panel">
-        <div class="scan-asset-row">
-          <div class="scanner-box" id="readerReturn">相機待機中</div>
-          <div class="asset-input-wrap">
-            <label>歸還物品掃描</label>
-            <input type="text" id="returnItemDisplay" placeholder="← 請對準條碼，系統自動調出借用紀錄" readonly>
-            <div class="scan-ctrl">
-              <button type="button" class="btn-action" id="btnCamReturn" onclick="toggleCamera('return')">開啟後鏡頭掃碼</button>
-              <button type="button" class="btn-secondary" onclick="mockScanReturn('K01')">模擬歸還掃碼 [K01]</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="borrow-ref-panel" id="returnRefPanel" style="display:none;">
-          <h4>原借出資訊核對</h4>
-          <div class="ref-grid">
-            <div><strong>物品：</strong><span id="refItem">-</span></div>
-            <div><strong>借出時間：</strong><span id="refTime">-</span></div>
-            <div><strong>借用人：</strong><span id="refBorrower">-</span></div>
-            <div><strong>數量 / 用途：</strong><span id="refPurpose">-</span></div>
-          </div>
-        </div>
-
-        <div class="grid-row-meta">
-          <div>
-            <label>歸還日期 / 時間</label>
-            <input type="text" id="returnTime" readonly>
-          </div>
-          <div>
-            <label>歸還人姓名</label>
-            <input type="text" id="returnerName" placeholder="請輸入姓名">
-          </div>
-          <div>
-            <label>備註說明</label>
-            <input type="text" id="returnRemark" placeholder="設備歸還狀況良好 / 異常狀況">
-          </div>
-        </div>
-
-        <div class="bottom-split">
-          <div>
-            <label>歸還人簽名</label>
-            <div class="sign-box">
-              <canvas id="padReturn"></canvas>
-            </div>
-            <div class="sign-meta">
-              <span>請歸還人於上方框內手寫簽名</span>
-              <button type="button" class="btn-clear" onclick="clearPad('return')">清除重簽</button>
-            </div>
-          </div>
-
-          <div>
-            <button class="btn-submit" onclick="submitReturn()">確認歸還結案</button>
-          </div>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- 4. 詳細資料介面 -->
-    <section id="viewDetails" class="view-section">
-      <div class="top-bar">
-        <h2>借還歷程與詳細資料</h2>
-        <button class="btn-back" onclick="navigateTo('viewHome')">返回首頁</button>
-      </div>
-
-      <div class="tabs">
-        <button class="tab-btn active" id="tabUnreturned" onclick="switchDetailTab('unreturned')">已借未還清單 (<span id="countUnreturned">0</span>)</button>
-        <button class="tab-btn" id="tabReturned" onclick="switchDetailTab('returned')">已借歸還紀錄 (<span id="countReturned">0</span>)</button>
-      </div>
-
-      <div class="data-table-container">
-        <table>
+      <div class="table-container">
+        <table class="data-table">
           <thead>
             <tr>
-              <th>狀態</th>
-              <th>物品</th>
-              <th>借用人身分</th>
-              <th>姓名</th>
-              <th>借用時間</th>
-              <th>借用簽名</th>
-              <th id="thReturnTime" style="display:none;">歸還時間</th>
-              <th id="thReturner" style="display:none;">歸還人</th>
-              <th id="thReturnSign" style="display:none;">歸還簽名</th>
-              <th id="thRemark" style="display:none;">備註</th>
+              <th>借出時間</th>
+              <th>品名代碼</th>
+              <th>借用人</th>
+              <th>身分單位</th>
+              <th>數量</th>
+              <th style="text-align: right;">操作</th>
             </tr>
           </thead>
-          <tbody id="recordTableBody">
+          <tbody id="unreturned-tbody">
+            <!-- 動態插入 -->
           </tbody>
         </table>
       </div>
-    </section>
+    </div>
 
+  </main>
+
+  <!-- 歸還簽名 Modal 彈窗 -->
+  <div id="modal-return" class="modal-backdrop is-hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3>確認歸還物品</h3>
+        <button id="btn-close-modal" class="modal-close">&times;</button>
+      </div>
+
+      <div id="modal-item-info" class="modal-info"></div>
+
+      <div class="form-field">
+        <label>歸還人姓名</label>
+        <input id="return-person-name" type="text" placeholder="請填寫歸還人姓名" />
+      </div>
+
+      <div class="form-field">
+        <label>歸還備註說明</label>
+        <input id="return-notes" type="text" placeholder="選填 (例: 物品完整無缺損)" />
+      </div>
+
+      <div class="form-field">
+        <div class="sign-header">
+          <label>歸還確認手寫簽名</label>
+          <button id="btn-clear-return-signature" type="button" class="btn-text-danger">清除簽名</button>
+        </div>
+        <div class="canvas-wrapper">
+          <canvas id="canvas-return-sign" class="signature-canvas"></canvas>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button id="btn-cancel-return" class="btn-secondary">取消</button>
+        <button id="btn-confirm-return" class="btn-success">確認歸還存檔</button>
+      </div>
+    </div>
   </div>
 
   <script src="app.js"></script>
