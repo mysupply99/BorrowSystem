@@ -12,7 +12,7 @@
   <!-- 自訂樣式表 -->
   <link rel="stylesheet" href="style.css" />
 
-  <!-- 外部必要核心庫 -->
+  <!-- 外部核心庫 -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/html5-qrcode"></script>
   <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
@@ -33,10 +33,11 @@
         <input id="beep-volume" type="range" min="0" max="1" step="0.05" value="0.5" />
       </div>
 
-      <!-- 分頁切換 -->
+      <!-- 主分頁切換：借用登記 / 歸還登記 / 借還清單 -->
       <nav class="tab-nav">
-        <button id="nav-borrow" class="tab-btn active">借用登記</button>
-        <button id="nav-return" class="tab-btn">歸還清單</button>
+        <button id="nav-borrow" class="tab-btn active">1. 借用登記</button>
+        <button id="nav-return" class="tab-btn">2. 歸還登記</button>
+        <button id="nav-records" class="tab-btn">3. 借還清單</button>
       </nav>
     </div>
   </header>
@@ -44,24 +45,28 @@
   <!-- 主內容容器 -->
   <main class="main-container">
     
-    <!-- 分頁 1：借用登記表單 -->
+    <!-- ================= 模組 1：借用登記 ================= -->
     <div id="page-borrow" class="page-view flex-row">
-      
       <!-- 左側：掃描與物品代碼 -->
       <section class="card left-pane">
         <div>
           <div class="card-header">
             <h2>1. 物品條碼掃描</h2>
-            <button id="btn-toggle-scanner" class="btn-sm">切換鏡頭</button>
+            <button id="btn-toggle-scanner-borrow" class="btn-sm btn-camera">開啟鏡頭</button>
           </div>
 
           <!-- 鏡頭預覽區 -->
-          <div id="qr-reader" class="scanner-box"></div>
+          <div id="qr-reader-borrow" class="scanner-box">
+            <div class="scanner-placeholder">
+              <span class="placeholder-icon">📷</span>
+              <p>點擊上方「開啟鏡頭」掃描 QR Code</p>
+            </div>
+          </div>
 
           <div class="form-group-stack">
             <div class="form-field">
-              <label>物品代碼 / 條碼編號</label>
-              <input id="borrow-item-code" type="text" placeholder="點擊掃描或手動輸入" class="input-mono" />
+              <label>物品代碼 (統一掃描，禁止手填)</label>
+              <input id="borrow-item-code" type="text" placeholder="請使用鏡頭掃描 QR Code 帶入" class="input-mono input-readonly" readonly />
             </div>
             
             <div class="form-row-2">
@@ -76,11 +81,10 @@
             </div>
           </div>
         </div>
-
-        <div class="tip-text">對準物品條碼即可自動讀取並播放嗶聲</div>
+        <div class="tip-text">物品代碼統一由 QR Code 自動掃描帶入</div>
       </section>
 
-      <!-- 右側：借用人資訊與簽名 -->
+      <!-- 右側：借用人資訊與手寫簽名 -->
       <section class="card right-pane">
         <div class="form-group-stack">
           <h2>2. 借用人身分資料</h2>
@@ -91,7 +95,7 @@
             <button id="role-btn-staff" type="button" class="role-btn">教職員登記</button>
           </div>
 
-          <!-- 學生容器 (預設顯示) -->
+          <!-- 學生容器 -->
           <div id="container-student" class="form-row-3">
             <div class="form-field">
               <label>班級</label>
@@ -107,7 +111,7 @@
             </div>
           </div>
 
-          <!-- 教職員容器 (預設隱藏) -->
+          <!-- 教職員容器 -->
           <div id="container-staff" class="form-row-2 is-hidden">
             <div class="form-field">
               <label>處室 / 科別</label>
@@ -130,10 +134,10 @@
           <!-- 借用用途 -->
           <div class="form-field">
             <label>借用用途說明 (選填)</label>
-            <input id="borrow-purpose" type="text" placeholder="例: 自然分組實驗 / 資訊培訓" />
+            <input id="borrow-purpose" type="text" placeholder="例: 課程分組教學 / 活動借用" />
           </div>
 
-          <!-- 借用電子簽名 -->
+          <!-- 借用人簽名 -->
           <div class="form-field">
             <div class="sign-header">
               <label>借用人手寫簽名</label>
@@ -145,35 +149,134 @@
           </div>
         </div>
 
-        <button id="btn-submit-borrow" class="btn-primary">送出借用登記</button>
+        <button id="btn-submit-borrow" class="btn-primary">確認借出並送出登記</button>
       </section>
-
     </div>
 
-    <!-- 分頁 2：歸還清單 (預設隱藏) -->
-    <div id="page-return" class="page-view card is-hidden">
-      <div class="list-header">
+    <!-- ================= 模組 2：歸還登記 ================= -->
+    <div id="page-return" class="page-view flex-row is-hidden">
+      <!-- 左側：掃描條碼或挑選未還物品 -->
+      <section class="card left-pane">
         <div>
-          <h2>借出中物品清單</h2>
-          <span class="sub-text">點選該項進行簽名歸還確認</span>
+          <div class="card-header">
+            <h2>1. 掃描欲歸還之物品</h2>
+            <button id="btn-toggle-scanner-return" class="btn-sm btn-camera">開啟鏡頭</button>
+          </div>
+
+          <div id="qr-reader-return" class="scanner-box">
+            <div class="scanner-placeholder">
+              <span class="placeholder-icon">📷</span>
+              <p>掃描歸還物品 QR Code 可自動帶入紀錄</p>
+            </div>
+          </div>
+
+          <div class="mt-14">
+            <div class="card-header">
+              <h3 class="sub-h3">或從未還物品中直接點選：</h3>
+              <button id="btn-refresh-return-pick" class="btn-sm">重新整理</button>
+            </div>
+            <div class="table-container mini-table">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>品名代碼</th>
+                    <th>借用人</th>
+                    <th style="text-align: right;">選擇</th>
+                  </tr>
+                </thead>
+                <tbody id="return-pick-tbody">
+                  <!-- 動態載入待歸還列表供挑選 -->
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-        <button id="btn-refresh-list" class="btn-sm">重新整理</button>
+      </section>
+
+      <!-- 右側：歸還資料確認與簽名 -->
+      <section class="card right-pane">
+        <div class="form-group-stack">
+          <h2>2. 歸還手續與簽名確認</h2>
+
+          <!-- 當前選定歸還的紀錄摘要 -->
+          <div id="return-active-info" class="selected-borrow-box">
+            請先由左側「鏡頭掃描條碼」或「點選待還物品」
+          </div>
+
+          <div class="form-field">
+            <label>歸還人姓名 (預設為原借用人，代還可修改)</label>
+            <input id="return-borrower-name" type="text" placeholder="請填寫歸還人姓名" />
+          </div>
+
+          <div class="form-field">
+            <label>歸還物品狀況備註 (選填)</label>
+            <input id="return-notes" type="text" placeholder="例: 物品完好 / 缺少一條線材" />
+          </div>
+
+          <!-- 歸還人簽名 -->
+          <div class="form-field">
+            <div class="sign-header">
+              <label>歸還人手寫簽名</label>
+              <button id="btn-clear-return-signature" type="button" class="btn-text-danger">清除簽名</button>
+            </div>
+            <div class="canvas-wrapper">
+              <canvas id="canvas-return-sign" class="signature-canvas"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <button id="btn-confirm-return" class="btn-success">確認無誤，辦理歸還存檔</button>
+      </section>
+    </div>
+
+    <!-- ================= 模組 3：借還清單 (已借未還 + 已歸還清冊) ================= -->
+    <div id="page-records" class="page-view card is-hidden flex-col">
+      <!-- 次分頁切換：已借未還 VS 已歸還清冊 -->
+      <div class="records-subnav-bar">
+        <div class="subnav-tabs">
+          <button id="subnav-unreturned" class="sub-tab-btn active">已借未還物品清單 (<span id="count-unreturned">0</span>)</button>
+          <button id="subnav-returned" class="sub-tab-btn">已歸還清冊紀錄 (<span id="count-returned">0</span>)</button>
+        </div>
+        <button id="btn-refresh-records" class="btn-sm">重新整理清單</button>
       </div>
 
-      <div class="table-container">
+      <!-- 表格 1：已借未還 -->
+      <div id="subpage-unreturned" class="table-container full-table">
         <table class="data-table">
           <thead>
             <tr>
               <th>借出時間</th>
-              <th>品名代碼</th>
+              <th>物品代碼 / 品名</th>
+              <th>數量</th>
               <th>借用人</th>
               <th>身分單位</th>
-              <th>數量</th>
-              <th style="text-align: right;">操作</th>
+              <th>用途說明</th>
+              <th style="text-align: right;">借用簽名</th>
             </tr>
           </thead>
-          <tbody id="unreturned-tbody">
-            <!-- 動態插入 -->
+          <tbody id="table-unreturned-body">
+            <!-- 動態載入 -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 表格 2：已歸還清冊 (預設隱藏) -->
+      <div id="subpage-returned" class="table-container full-table is-hidden">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>借出時間</th>
+              <th>歸還時間</th>
+              <th>物品代碼 / 品名</th>
+              <th>數量</th>
+              <th>借用人 (單位)</th>
+              <th>歸還人</th>
+              <th>歸還備註</th>
+              <th style="text-align: right;">簽名紀錄</th>
+            </tr>
+          </thead>
+          <tbody id="table-returned-body">
+            <!-- 動態載入 -->
           </tbody>
         </table>
       </div>
@@ -181,39 +284,16 @@
 
   </main>
 
-  <!-- 歸還簽名 Modal 彈窗 -->
-  <div id="modal-return" class="modal-backdrop is-hidden">
+  <!-- 查看簽名彈窗 Modal -->
+  <div id="modal-view-signs" class="modal-backdrop is-hidden">
     <div class="modal-box">
       <div class="modal-header">
-        <h3>確認歸還物品</h3>
-        <button id="btn-close-modal" class="modal-close">&times;</button>
+        <h3>簽名查閱紀錄</h3>
+        <button id="btn-close-sign-modal" class="modal-close">&times;</button>
       </div>
 
-      <div id="modal-item-info" class="modal-info"></div>
-
-      <div class="form-field">
-        <label>歸還人姓名</label>
-        <input id="return-person-name" type="text" placeholder="請填寫歸還人姓名" />
-      </div>
-
-      <div class="form-field">
-        <label>歸還備註說明</label>
-        <input id="return-notes" type="text" placeholder="選填 (例: 物品完整無缺損)" />
-      </div>
-
-      <div class="form-field">
-        <div class="sign-header">
-          <label>歸還確認手寫簽名</label>
-          <button id="btn-clear-return-signature" type="button" class="btn-text-danger">清除簽名</button>
-        </div>
-        <div class="canvas-wrapper">
-          <canvas id="canvas-return-sign" class="signature-canvas"></canvas>
-        </div>
-      </div>
-
-      <div class="modal-actions">
-        <button id="btn-cancel-return" class="btn-secondary">取消</button>
-        <button id="btn-confirm-return" class="btn-success">確認歸還存檔</button>
+      <div id="sign-view-content" class="signs-compare-grid">
+        <!-- 動態帶入借用與歸還簽名圖片 -->
       </div>
     </div>
   </div>
