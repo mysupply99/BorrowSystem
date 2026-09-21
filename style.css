@@ -13,8 +13,14 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  -webkit-user-select: none;
-  user-select: none;
+  /* 移除全域 user-select: none，避免 Safari 輸入框與點擊被鎖死 */
+}
+
+/* 明確開放表單、按鈕可正常點擊、聚焦與文字選取 */
+input, select, textarea, button, a {
+  -webkit-user-select: auto !important;
+  user-select: auto !important;
+  pointer-events: auto !important;
 }
 
 /* === 頂部導航列 === */
@@ -110,6 +116,7 @@ body {
   width: 100%;
   margin: 0 auto;
   overflow: hidden;
+  position: relative;
 }
 
 .page-view {
@@ -123,6 +130,7 @@ body {
 }
 
 .card {
+  position: relative; /* 限制內部元素層級 */
   background-color: #ffffff;
   border-radius: 16px;
   border: 1px solid #e2e8f0;
@@ -135,6 +143,7 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
+  z-index: 1; /* 確保在同一圖層 */
 }
 
 .right-pane {
@@ -161,14 +170,24 @@ h2 {
   display: block;
 }
 
-/* === 鏡頭與掃碼區 === */
+/* === 鏡頭與掃碼區 (嚴格限制在容器內，禁止溢出遮罩) === */
 .scanner-box {
   width: 100%;
   aspect-ratio: 16 / 9;
   background-color: #0f172a;
   border-radius: 12px;
-  overflow: hidden;
+  overflow: hidden !important;
+  position: relative !important;
   border: 1px solid #cbd5e1;
+}
+
+/* 強制 html5-qrcode 產生的 video 與 canvas 不超出容器 */
+.scanner-box video, 
+.scanner-box canvas {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  position: relative !important;
 }
 
 .tip-text {
@@ -277,7 +296,7 @@ h2 {
   width: 100%;
   height: 100%;
   display: block;
-  touch-action: none !important; /* 杜絕 Safari 手勢滑動干擾 */
+  touch-action: none !important; /* 杜絕 Safari 觸控橡皮筋干擾 */
 }
 
 /* === 按鈕樣式 === */
