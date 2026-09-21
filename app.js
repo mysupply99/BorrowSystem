@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 
 
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // === 2. Web Audio API 蜂鳴聲 (1800Hz) ===
 class Beeper {
@@ -196,7 +196,7 @@ function switchTab(tab) {
   }
 }
 
-// === 9. 雲端資料庫操作 (Supabase) ===
+// === 9. 雲端資料庫操作 (使用 supabaseClient) ===
 async function submitBorrowRecord() {
   const itemCode = el.itemCode.value.trim();
   const itemName = el.itemName.value.trim();
@@ -231,7 +231,7 @@ async function submitBorrowRecord() {
   el.btnSubmitBorrow.disabled = true;
   el.btnSubmitBorrow.innerText = "寫入資料庫中...";
 
-  const { error } = await supabase.from("borrow_records").insert([
+  const { error } = await supabaseClient.from("borrow_records").insert([
     {
       item_code: itemCode,
       item_name: itemName,
@@ -271,7 +271,7 @@ async function fetchUnreturnedList() {
   if (!el.unreturnedTbody) return;
   el.unreturnedTbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding: 24px; color: #94a3b8;">載入中...</td></tr>`;
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseClient
     .from("borrow_records")
     .select("*")
     .eq("is_returned", false)
@@ -304,7 +304,7 @@ async function fetchUnreturnedList() {
         <td style="font-size: 0.75rem; color: #64748b;">${row.department_class || "-"}</td>
         <td><b>${row.quantity}</b></td>
         <td style="text-align: right;">
-          <button onclick="openReturnModal('${row.id}', '${row.item_name || row.item_code}', '${row.borrower_name}')" class="btn-sm" style="background-color: #059669; color: white; border: none;">
+          <button onclick="openReturnModal('${row.id}', '${row.item_name || row.item_code}', '${row.borrower_name}')" class="btn-sm" style="background-color: #059669; color: white; border: none; cursor: pointer;">
             辦理歸還
           </button>
         </td>
@@ -353,7 +353,7 @@ async function submitReturnRecord() {
   el.btnConfirmReturn.disabled = true;
   el.btnConfirmReturn.innerText = "存檔中...";
 
-  const { error } = await supabase
+  const { error } = await supabaseClient
     .from("borrow_records")
     .update({
       is_returned: true,
