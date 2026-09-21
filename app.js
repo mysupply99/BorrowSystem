@@ -10,6 +10,7 @@ let dbClient = null;
 try {
   if (window.supabase && typeof window.supabase.createClient === "function") {
     dbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    console.log("Supabase Client 初始化成功");
   }
 } catch (e) {
   console.error("Supabase 初始化異常:", e);
@@ -67,8 +68,8 @@ const beeper = new Beeper();
 
 // === 3. 全域狀態管理 ===
 let currentRole = "student";
-let activeMainTab = "borrow"; // "borrow" | "return" | "records"
-let activeRecordsSubTab = "unreturned"; // "unreturned" | "returned"
+let activeMainTab = "borrow";
+let activeRecordsSubTab = "unreturned";
 
 let borrowPad = null;
 let returnPad = null;
@@ -78,8 +79,8 @@ let qrReturn = null;
 let isBorrowCameraOn = false;
 let isReturnCameraOn = false;
 
-let selectedBorrowRecord = null; // 歸還操作選定的紀錄物件
-let cachedUnreturnedRecords = []; // 快取未還資料供掃碼匹配
+let selectedBorrowRecord = null;
+let cachedUnreturnedRecords = [];
 
 // === 4. 高解析度 Canvas 初始化 ===
 function initSignatureCanvas(canvas, currentPad) {
@@ -105,7 +106,50 @@ function initSignatureCanvas(canvas, currentPad) {
   }
 }
 
-// === 5. 掃描模組（借用 與 歸還 獨立鏡頭） ===
+// === 5. 核心：從 Supabase items 表查詢物品品名 ===
+async function fetchItemNameByCode(itemCode) {
+  const nameInput = document.getElementById("borrow-item-name");
+  if (!nameInput || !dbClient) return;
+
+  nameInput.value = "查詢品名中...";
+  nameInput.style.color = "#94a3b8";
+
+  try {
+    const { data, error } = await dbClient
+      .from("items")
+      .select("item_name")
+      .eq("item_code", itemCode)
+      .maybeSingle();
+
+    nameInput.style.color = "#0f172a";
+
+    if (error) {
+      console.warn("items 表查無資料或權限問題:", error);
+      nameInput.value = "";
+      return;
+    }
+
+    if (data && data.item_name) {
+      nameInput.value = data.item_name;
+      // 成功帶出品名給予綠色視覺反饋
+      nameInput.style.borderColor = "#10b981";
+      nameInput.style.backgroundColor = "#ecfdf5";
+      setTimeout(() => {
+        nameInput.style.borderColor = "";
+        nameInput.style.backgroundColor = "";
+      }, 1200);
+    } else {
+      // items 表無此項目，清空讓使用者可手填
+      nameInput.value = "";
+      nameInput.placeholder = "資料庫無此品名，請手動輸入";
+    }
+  } catch (e) {
+    console.error("品名查詢異常:", e);
+    nameInput.value = "";
+  }
+}
+
+// === 6. 掃描模組 (借用掃描 + 自動查品名) ===
 
 // 借用掃描器
 async function toggleBorrowScanner() {
@@ -129,13 +173,17 @@ async function toggleBorrowScanner() {
     await qrBorrow.start(
       { facingMode: "environment" },
       { fps: 15, qrbox: (w, h) => ({ width: Math.floor(Math.min(w, h) * 0.85), height: Math.floor(Math.min(w, h) * 0.85) }) },
-      (decodedText) => {
-        beeper.beep();
+      async (decodedText) => {
         const input = document.getElementById("borrow-item-code");
-        if (input) {
+        // 避免同一條碼反覆觸發
+        if (input && input.value !== decodedText) {
+          beeper.beep();
           input.value = decodedText;
           input.style.borderColor = "#10b981";
           setTimeout(() => input.style.borderColor = "", 1000);
+
+          // 核心：掃到代碼立即去 items 資料表查品名
+          await fetchItemNameByCode(decodedText);
         }
       },
       () => {}
@@ -152,7 +200,7 @@ async function toggleBorrowScanner() {
   }
 }
 
-// 歸還掃描器 (自動配對未歸還清冊)
+// 歸還掃描器
 async function toggleReturnScanner() {
   const btn = document.getElementById("btn-toggle-scanner-return");
   const qrBox = document.getElementById("qr-reader-return");
@@ -176,7 +224,6 @@ async function toggleReturnScanner() {
       { fps: 15, qrbox: (w, h) => ({ width: Math.floor(Math.min(w, h) * 0.85), height: Math.floor(Math.min(w, h) * 0.85) }) },
       (decodedText) => {
         beeper.beep();
-        // 比對目前未還快取中是否有此 item_code
         const match = cachedUnreturnedRecords.find(r => r.item_code === decodedText);
         if (match) {
           selectRecordForReturn(match);
@@ -214,7 +261,7 @@ async function stopAllCameras() {
   }
 }
 
-// === 6. 身分切換 ===
+// === 7. 身分切換 ===
 function switchRole(role) {
   currentRole = role;
   const btnStudent = document.getElementById("role-btn-student");
@@ -235,7 +282,7 @@ function switchRole(role) {
   }
 }
 
-// === 7. 主分頁切換 (借用 / 歸還 / 借還清單) ===
+// === 8. 主分頁切換 ===
 function switchMainTab(tab) {
   activeMainTab = tab;
   stopAllCameras();
@@ -264,7 +311,7 @@ function switchMainTab(tab) {
   }
 }
 
-// === 8. 清單次分頁切換 (已借未還 VS 已歸還清冊) ===
+// === 9. 清單次分頁切換 ===
 function switchRecordsSubTab(subTab) {
   activeRecordsSubTab = subTab;
   document.getElementById("subnav-unreturned")?.classList.toggle("active", subTab === "unreturned");
@@ -274,7 +321,7 @@ function switchRecordsSubTab(subTab) {
   document.getElementById("subpage-returned")?.classList.toggle("is-hidden", subTab !== "returned");
 }
 
-// === 9. 模組 1：借用登記送出 ===
+// === 10. 模組 1：借用登記送出 ===
 async function submitBorrowRecord() {
   if (!dbClient) return alert("未設定 Supabase 連線！");
 
@@ -325,7 +372,7 @@ async function submitBorrowRecord() {
 
   if (error) {
     console.error("借用失敗:", error);
-    alert("登記失敗，請檢查網路！");
+    alert(`登記失敗！\n錯誤原因: ${error.message}`);
   } else {
     alert("借用手續完成！");
     document.getElementById("borrow-item-code").value = "";
@@ -340,9 +387,7 @@ async function submitBorrowRecord() {
   }
 }
 
-// === 10. 模組 2：歸還登記邏輯 ===
-
-// 讀取待歸還清單供挑選
+// === 11. 模組 2：歸還登記邏輯 ===
 async function fetchReturnPickList() {
   const tbody = document.getElementById("return-pick-tbody");
   if (!tbody || !dbClient) return;
@@ -376,7 +421,6 @@ async function fetchReturnPickList() {
   `).join("");
 }
 
-// 點選或掃描選定歸還物品
 window.selectRecordForReturn = function(record) {
   selectedBorrowRecord = record;
   const infoBox = document.getElementById("return-active-info");
@@ -394,7 +438,6 @@ window.selectRecordForReturn = function(record) {
   if (returnPad) returnPad.clear();
 };
 
-// 送出歸還存檔
 async function submitReturnConfirm() {
   if (!selectedBorrowRecord) return alert("請先選定欲歸還之物品紀錄！");
   if (!dbClient) return alert("資料庫尚未連接！");
@@ -425,7 +468,7 @@ async function submitReturnConfirm() {
   btn.innerText = "確認無誤，辦理歸還存檔";
 
   if (error) {
-    alert("歸還失敗，請檢查網路！");
+    alert(`歸還失敗：${error.message}`);
   } else {
     alert("物品已順利完成歸還手續！");
     selectedBorrowRecord = null;
@@ -437,7 +480,7 @@ async function submitReturnConfirm() {
   }
 }
 
-// === 11. 模組 3：借還清冊載入與簽名查閱 ===
+// === 12. 模組 3：借還清冊載入與簽名查閱 ===
 async function fetchAllRecords() {
   if (!dbClient) return;
 
@@ -461,11 +504,10 @@ async function fetchAllRecords() {
   const unreturnedList = data.filter(r => !r.is_returned);
   const returnedList = data.filter(r => r.is_returned);
 
-  // 更新計數
   document.getElementById("count-unreturned").innerText = unreturnedList.length;
   document.getElementById("count-returned").innerText = returnedList.length;
 
-  // 1. 渲染 已借未還
+  // 1. 已借未還
   if (unreturnedList.length === 0) {
     unreturnedTbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:#94a3b8;">目前所有借用物品皆已歸還</td></tr>`;
   } else {
@@ -487,7 +529,7 @@ async function fetchAllRecords() {
     }).join("");
   }
 
-  // 2. 渲染 已歸還清冊
+  // 2. 已歸還清冊
   if (returnedList.length === 0) {
     returnedTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px;color:#94a3b8;">目前尚無已歸還紀錄</td></tr>`;
   } else {
@@ -512,7 +554,6 @@ async function fetchAllRecords() {
   }
 }
 
-// 彈窗檢視簽名圖片
 window.viewSignModal = function(record) {
   const modal = document.getElementById("modal-view-signs");
   const content = document.getElementById("sign-view-content");
@@ -531,54 +572,44 @@ window.viewSignModal = function(record) {
   modal.classList.remove("is-hidden");
 };
 
-// === 12. 事件監聽初始化 ===
+// === 13. 事件監聽初始化 ===
 document.addEventListener("DOMContentLoaded", () => {
-  // 提示音
   const beepVol = document.getElementById("beep-volume");
   if (beepVol) {
     beepVol.value = beeper.volume;
     beepVol.addEventListener("input", (e) => beeper.setVolume(e.target.value));
   }
 
-  // 主導航切換
   document.getElementById("nav-borrow")?.addEventListener("click", () => switchMainTab("borrow"));
   document.getElementById("nav-return")?.addEventListener("click", () => switchMainTab("return"));
   document.getElementById("nav-records")?.addEventListener("click", () => switchMainTab("records"));
 
-  // 清單次導航切換
   document.getElementById("subnav-unreturned")?.addEventListener("click", () => switchRecordsSubTab("unreturned"));
   document.getElementById("subnav-returned")?.addEventListener("click", () => switchRecordsSubTab("returned"));
 
-  // 身分切換
   document.getElementById("role-btn-student")?.addEventListener("click", () => switchRole("student"));
   document.getElementById("role-btn-staff")?.addEventListener("click", () => switchRole("staff"));
 
-  // 鏡頭開關
   document.getElementById("btn-toggle-scanner-borrow")?.addEventListener("click", toggleBorrowScanner);
   document.getElementById("btn-toggle-scanner-return")?.addEventListener("click", toggleReturnScanner);
 
-  // 簽名板按鈕
   document.getElementById("btn-clear-signature")?.addEventListener("click", () => borrowPad && borrowPad.clear());
   document.getElementById("btn-clear-return-signature")?.addEventListener("click", () => returnPad && returnPad.clear());
 
-  // 表單操作按鈕
   document.getElementById("btn-submit-borrow")?.addEventListener("click", submitBorrowRecord);
   document.getElementById("btn-confirm-return")?.addEventListener("click", submitReturnConfirm);
   document.getElementById("btn-refresh-return-pick")?.addEventListener("click", fetchReturnPickList);
   document.getElementById("btn-refresh-records")?.addEventListener("click", fetchAllRecords);
 
-  // 彈窗關閉
   document.getElementById("btn-close-sign-modal")?.addEventListener("click", () => {
     document.getElementById("modal-view-signs")?.classList.add("is-hidden");
   });
 
-  // 初始借用簽名板
   setTimeout(() => {
     const c = document.getElementById("canvas-borrow-sign");
     borrowPad = initSignatureCanvas(c);
   }, 200);
 
-  // iPad 旋轉適配
   window.addEventListener("resize", () => {
     if (activeMainTab === "borrow") {
       const c = document.getElementById("canvas-borrow-sign");
