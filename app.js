@@ -5,7 +5,6 @@
 const SUPABASE_URL = "https://qdiwyzkjgxvuinulpvsg.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkaXd5emtqZ3h2dWludWxwdnNnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk4Mjg4ODQsImV4cCI6MjEwNTQwNDg4NH0.U_IUlKcz-6Qgr_AmEf-EyVTabdfs5oMEQXujBiRDfVg";
 
-
 // 物品條碼對照表
 const ASSET_MAP = {
   "K01": "視聽教室鑰匙",
@@ -80,7 +79,7 @@ function setOfflineUI(msg) {
 }
 
 // ==========================================
-// 3. 身分切換控制 (解決問題 1)
+// 3. 身分切換控制
 // ==========================================
 function handleRoleChange() {
   const roleEl = document.querySelector('input[name="borrowRole"]:checked');
@@ -100,17 +99,15 @@ function handleRoleChange() {
 }
 
 // ==========================================
-// 4. iPad 簽名板精確初始化 (解決問題 2, 3)
+// 4. iPad 簽名板精確初始化
 // ==========================================
 function setupSignaturePad(canvasId) {
   const canvas = document.getElementById(canvasId);
   if (!canvas) return null;
 
-  // 取得父容器的實際寬高
   const rect = canvas.getBoundingClientRect();
   const ratio = Math.max(window.devicePixelRatio || 1, 1);
 
-  // 明確設定畫布像素寬高，避免 0 寬度問題
   canvas.width = (rect.width || 380) * ratio;
   canvas.height = (rect.height || 120) * ratio;
 
@@ -142,7 +139,6 @@ function navigateTo(viewId) {
   if (viewId === 'viewBorrow') {
     document.getElementById('borrowTime').value = getNow();
     handleRoleChange();
-    // 延遲 150ms 確保 DOM 渲染完畢後再初始化畫布尺寸
     setTimeout(() => {
       padBorrow = setupSignaturePad('padBorrow');
     }, 150);
@@ -159,7 +155,7 @@ function navigateTo(viewId) {
 }
 
 // ==========================================
-// 5. 相機掃描
+// 5. 相機掃描（放大解碼範圍為全視野 85% / 15 FPS 秒讀）
 // ==========================================
 function handleScanResult(decodedText, mode) {
   const cleanCode = decodedText.trim();
@@ -208,8 +204,16 @@ function toggleCamera(mode) {
 
   activeScanner = new Html5Qrcode(containerId);
   activeScanner.start(
-    { facingMode: "environment" }, // iPad 後置主鏡頭
-    { fps: 10, qrbox: { width: 110, height: 110 }, aspectRatio: 1.0 },
+    { facingMode: "environment" },
+    {
+      fps: 15,          // 提升取樣頻率至每秒 15 幀
+      aspectRatio: 1.0, // 正方形視野
+      qrbox: (viewfinderWidth, viewfinderHeight) => {
+        // 動態抓取視野 85% 範圍，極大化秒讀涵蓋率
+        const edge = Math.floor(Math.min(viewfinderWidth, viewfinderHeight) * 0.85);
+        return { width: edge, height: edge };
+      }
+    },
     (decodedText) => {
       handleScanResult(decodedText, mode);
       stopCamera();
