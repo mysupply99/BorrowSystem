@@ -16,7 +16,7 @@ try {
   console.error("Supabase 初始化異常:", e);
 }
 
-// === 2. Web Audio API 蜂鳴聲 (1800Hz / 400Hz 警告音) ===
+// === 2. Web Audio API 蜂鳴聲 (1800Hz / 350Hz 警告音) ===
 class Beeper {
   constructor() {
     this.ctx = null;
@@ -48,7 +48,7 @@ class Beeper {
       const gainNode = this.ctx.createGain();
 
       osc.type = "sine";
-      osc.frequency.setValueAtTime(1800, this.ctx.currentTime); // 正常掃碼嗶聲
+      osc.frequency.setValueAtTime(1800, this.ctx.currentTime);
 
       gainNode.gain.setValueAtTime(this.volume, this.ctx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.08);
@@ -63,7 +63,6 @@ class Beeper {
     }
   }
 
-  // 重複借出錯誤警報音 (低頻長音)
   beepError() {
     try {
       this.init();
@@ -73,7 +72,7 @@ class Beeper {
       const gainNode = this.ctx.createGain();
 
       osc.type = "sawtooth";
-      osc.frequency.setValueAtTime(350, this.ctx.currentTime); // 警告低音
+      osc.frequency.setValueAtTime(350, this.ctx.currentTime);
 
       gainNode.gain.setValueAtTime(this.volume, this.ctx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.3);
@@ -99,10 +98,13 @@ let activeRecordsSubTab = "unreturned";
 let borrowPad = null;
 let returnPad = null;
 
+// 相機控制與面向設定 ("environment" = 後鏡頭, "user" = 前鏡頭)
 let qrBorrow = null;
 let qrReturn = null;
 let isBorrowCameraOn = false;
 let isReturnCameraOn = false;
+let borrowFacingMode = "environment";
+let returnFacingMode = "environment";
 
 let selectedBorrowRecord = null;
 let cachedUnreturnedRecords = [];
@@ -132,8 +134,6 @@ function initSignatureCanvas(canvas, currentPad) {
 }
 
 // === 5. 核心查詢與防重複檢驗 ===
-
-// 查詢該物品目前是否處於「未歸還借出中」狀態
 async function checkItemAlreadyBorrowed(itemCode) {
   if (!dbClient) return null;
   const { data, error } = await dbClient
@@ -147,10 +147,9 @@ async function checkItemAlreadyBorrowed(itemCode) {
     console.warn("檢查借用狀態失敗:", error);
     return null;
   }
-  return data; // 若有資料，代表目前尚未歸還
+  return data;
 }
 
-// 從 items 表查詢品名
 async function fetchItemNameByCode(itemCode) {
   const nameInput = document.getElementById("borrow-item-name");
   if (!nameInput || !dbClient) return;
@@ -188,36 +187,26 @@ async function fetchItemNameByCode(itemCode) {
   }
 }
 
-// === 6. 掃描模組 (整合防重複檢驗) ===
+// === 6. 掃描模組（支援前後鏡頭即時切換） ===
 
-// 借用掃描器
-async function toggleBorrowScanner() {
+// 啟動借用相機
+async function startBorrowCamera() {
   const btn = document.getElementById("btn-toggle-scanner-borrow");
-  const qrBox = document.getElementById("qr-reader-borrow");
+  const switchBtn = document.getElementById("btn-switch-camera-borrow");
 
-  if (isBorrowCameraOn) {
-    if (qrBorrow) await qrBorrow.stop();
-    isBorrowCameraOn = false;
-    btn.innerText = "開啟鏡頭";
-    btn.classList.remove("camera-active");
-    qrBox.innerHTML = `<div class="scanner-placeholder"><span class="placeholder-icon">📷</span><p>點擊上方「開啟鏡頭」掃描 QR Code</p></div>`;
-    return;
-  }
+  if (!qrBorrow) qrBorrow = new Html5Qrcode("qr-reader-borrow");
+  btn.innerText = "啟動中...";
+  btn.disabled = true;
 
   try {
-    if (!qrBorrow) qrBorrow = new Html5Qrcode("qr-reader-borrow");
-    btn.innerText = "啟動中...";
-    btn.disabled = true;
-
     await qrBorrow.start(
-      { facingMode: "environment" },
+      { facingMode: borrowFacingMode },
       { fps: 15, qrbox: (w, h) => ({ width: Math.floor(Math.min(w, h) * 0.85), height: Math.floor(Math.min(w, h) * 0.85) }) },
       async (decodedText) => {
         const input = document.getElementById("borrow-item-code");
         const nameInput = document.getElementById("borrow-item-name");
         
         if (input && input.value !== decodedText) {
-          // 核心檢查：是否已被借出且未還
           const unreturnedInfo = await checkItemAlreadyBorrowed(decodedText);
           if (unreturnedInfo) {
             beeper.beepError();
@@ -233,7 +222,6 @@ async function toggleBorrowScanner() {
             return;
           }
 
-          // 正常可借狀態
           beeper.beep();
           input.value = decodedText;
           input.style.borderColor = "#10b981";
@@ -249,34 +237,69 @@ async function toggleBorrowScanner() {
     btn.disabled = false;
     btn.innerText = "關閉鏡頭";
     btn.classList.add("camera-active");
+    if (switchBtn) {
+      switchBtn.innerText = borrowFacingMode === "environment" ? "切換至前鏡頭" : "切換至後鏡頭";
+    }
   } catch (err) {
-    alert("無法開啟借用鏡頭，請確認相機權限！");
+    console.error("相機啟動異常:", err);
+    alert("無法開啟借用鏡頭，請確認已授權瀏覽器使用相機！");
     btn.disabled = false;
     btn.innerText = "開啟鏡頭";
+    btn.classList.remove("camera-active");
+    isBorrowCameraOn = false;
   }
 }
 
-// 歸還掃描器
-async function toggleReturnScanner() {
-  const btn = document.getElementById("btn-toggle-scanner-return");
-  const qrBox = document.getElementById("qr-reader-return");
+// 借用相機開關
+async function toggleBorrowScanner() {
+  const btn = document.getElementById("btn-toggle-scanner-borrow");
+  const qrBox = document.getElementById("qr-reader-borrow");
 
-  if (isReturnCameraOn) {
-    if (qrReturn) await qrReturn.stop();
-    isReturnCameraOn = false;
+  if (isBorrowCameraOn) {
+    if (qrBorrow) {
+      try { await qrBorrow.stop(); } catch (e) {}
+    }
+    isBorrowCameraOn = false;
     btn.innerText = "開啟鏡頭";
     btn.classList.remove("camera-active");
-    qrBox.innerHTML = `<div class="scanner-placeholder"><span class="placeholder-icon">📷</span><p>掃描歸還物品 QR Code 可自動帶入紀錄</p></div>`;
+    qrBox.innerHTML = `<div class="scanner-placeholder"><span class="placeholder-icon">📷</span><p>點擊上方「開啟鏡頭」掃描 QR Code</p></div>`;
     return;
   }
 
-  try {
-    if (!qrReturn) qrReturn = new Html5Qrcode("qr-reader-return");
-    btn.innerText = "啟動中...";
-    btn.disabled = true;
+  await startBorrowCamera();
+}
 
+// 借用相機：切換前後鏡頭
+async function switchBorrowCamera() {
+  borrowFacingMode = borrowFacingMode === "environment" ? "user" : "environment";
+  const switchBtn = document.getElementById("btn-switch-camera-borrow");
+  if (switchBtn) {
+    switchBtn.innerText = borrowFacingMode === "environment" ? "切換至前鏡頭" : "切換至後鏡頭";
+  }
+
+  // 若鏡頭正在運行，立即重啟以套用新方向
+  if (isBorrowCameraOn && qrBorrow) {
+    try {
+      await qrBorrow.stop();
+      await startBorrowCamera();
+    } catch (e) {
+      console.warn("重啟相機失敗:", e);
+    }
+  }
+}
+
+// 啟動歸還相機
+async function startReturnCamera() {
+  const btn = document.getElementById("btn-toggle-scanner-return");
+  const switchBtn = document.getElementById("btn-switch-camera-return");
+
+  if (!qrReturn) qrReturn = new Html5Qrcode("qr-reader-return");
+  btn.innerText = "啟動中...";
+  btn.disabled = true;
+
+  try {
     await qrReturn.start(
-      { facingMode: "environment" },
+      { facingMode: returnFacingMode },
       { fps: 15, qrbox: (w, h) => ({ width: Math.floor(Math.min(w, h) * 0.85), height: Math.floor(Math.min(w, h) * 0.85) }) },
       (decodedText) => {
         beeper.beep();
@@ -294,10 +317,53 @@ async function toggleReturnScanner() {
     btn.disabled = false;
     btn.innerText = "關閉鏡頭";
     btn.classList.add("camera-active");
+    if (switchBtn) {
+      switchBtn.innerText = returnFacingMode === "environment" ? "切換至前鏡頭" : "切換至後鏡頭";
+    }
   } catch (err) {
+    console.error("歸還相機啟動異常:", err);
     alert("無法開啟歸還鏡頭，請確認相機權限！");
     btn.disabled = false;
     btn.innerText = "開啟鏡頭";
+    btn.classList.remove("camera-active");
+    isReturnCameraOn = false;
+  }
+}
+
+// 歸還相機開關
+async function toggleReturnScanner() {
+  const btn = document.getElementById("btn-toggle-scanner-return");
+  const qrBox = document.getElementById("qr-reader-return");
+
+  if (isReturnCameraOn) {
+    if (qrReturn) {
+      try { await qrReturn.stop(); } catch (e) {}
+    }
+    isReturnCameraOn = false;
+    btn.innerText = "開啟鏡頭";
+    btn.classList.remove("camera-active");
+    qrBox.innerHTML = `<div class="scanner-placeholder"><span class="placeholder-icon">📷</span><p>掃描歸還物品 QR Code 可自動帶入紀錄</p></div>`;
+    return;
+  }
+
+  await startReturnCamera();
+}
+
+// 歸還相機：切換前後鏡頭
+async function switchReturnCamera() {
+  returnFacingMode = returnFacingMode === "environment" ? "user" : "environment";
+  const switchBtn = document.getElementById("btn-switch-camera-return");
+  if (switchBtn) {
+    switchBtn.innerText = returnFacingMode === "environment" ? "切換至前鏡頭" : "切換至後鏡頭";
+  }
+
+  if (isReturnCameraOn && qrReturn) {
+    try {
+      await qrReturn.stop();
+      await startReturnCamera();
+    } catch (e) {
+      console.warn("重啟相機失敗:", e);
+    }
   }
 }
 
@@ -377,7 +443,7 @@ function switchRecordsSubTab(subTab) {
   document.getElementById("subpage-returned")?.classList.toggle("is-hidden", subTab !== "returned");
 }
 
-// === 10. 模組 1：借用登記送出 (雙重防重複驗證) ===
+// === 10. 模組 1：借用登記送出 ===
 async function submitBorrowRecord() {
   if (!dbClient) return alert("未設定 Supabase 連線！");
 
@@ -401,7 +467,6 @@ async function submitBorrowRecord() {
 
   if (!itemCode) return alert("請先開啟鏡頭掃描物品 QR Code 代碼！");
 
-  // 送出前二次檢查：確保無人搶先借出
   const alreadyBorrowed = await checkItemAlreadyBorrowed(itemCode);
   if (alreadyBorrowed) {
     beeper.beepError();
@@ -436,7 +501,6 @@ async function submitBorrowRecord() {
 
   if (error) {
     console.error("借用失敗:", error);
-    // 攔截唯一索引約束錯誤
     if (error.code === "23505") {
       alert("⚠️ 此物品已被他人借出中，資料庫已自動拒絕重複借出！");
     } else {
@@ -576,7 +640,6 @@ async function fetchAllRecords() {
   document.getElementById("count-unreturned").innerText = unreturnedList.length;
   document.getElementById("count-returned").innerText = returnedList.length;
 
-  // 1. 已借未還
   if (unreturnedList.length === 0) {
     unreturnedTbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;color:#94a3b8;">目前所有借用物品皆已歸還</td></tr>`;
   } else {
@@ -598,7 +661,6 @@ async function fetchAllRecords() {
     }).join("");
   }
 
-  // 2. 已歸還清冊
   if (returnedList.length === 0) {
     returnedTbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:20px;color:#94a3b8;">目前尚無已歸還紀錄</td></tr>`;
   } else {
@@ -649,22 +711,32 @@ document.addEventListener("DOMContentLoaded", () => {
     beepVol.addEventListener("input", (e) => beeper.setVolume(e.target.value));
   }
 
+  // 主分頁
   document.getElementById("nav-borrow")?.addEventListener("click", () => switchMainTab("borrow"));
   document.getElementById("nav-return")?.addEventListener("click", () => switchMainTab("return"));
   document.getElementById("nav-records")?.addEventListener("click", () => switchMainTab("records"));
 
+  // 清單次分頁
   document.getElementById("subnav-unreturned")?.addEventListener("click", () => switchRecordsSubTab("unreturned"));
   document.getElementById("subnav-returned")?.addEventListener("click", () => switchRecordsSubTab("returned"));
 
+  // 身分切換
   document.getElementById("role-btn-student")?.addEventListener("click", () => switchRole("student"));
   document.getElementById("role-btn-staff")?.addEventListener("click", () => switchRole("staff"));
 
+  // 借用相機：開啟/關閉 與 切換前後鏡頭
   document.getElementById("btn-toggle-scanner-borrow")?.addEventListener("click", toggleBorrowScanner);
-  document.getElementById("btn-toggle-scanner-return")?.addEventListener("click", toggleReturnScanner);
+  document.getElementById("btn-switch-camera-borrow")?.addEventListener("click", switchBorrowCamera);
 
+  // 歸還相機：開啟/關閉 與 切換前後鏡頭
+  document.getElementById("btn-toggle-scanner-return")?.addEventListener("click", toggleReturnScanner);
+  document.getElementById("btn-switch-camera-return")?.addEventListener("click", switchReturnCamera);
+
+  // 簽名板按鈕
   document.getElementById("btn-clear-signature")?.addEventListener("click", () => borrowPad && borrowPad.clear());
   document.getElementById("btn-clear-return-signature")?.addEventListener("click", () => returnPad && returnPad.clear());
 
+  // 表單按鈕
   document.getElementById("btn-submit-borrow")?.addEventListener("click", submitBorrowRecord);
   document.getElementById("btn-confirm-return")?.addEventListener("click", submitReturnConfirm);
   document.getElementById("btn-refresh-return-pick")?.addEventListener("click", fetchReturnPickList);
