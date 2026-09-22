@@ -16,7 +16,7 @@ try {
   console.error("Supabase 初始化異常:", e);
 }
 
-// === 2. Web Audio API 蜂鳴聲 (1800Hz) ===
+// === 2. Web Audio API 蜂鳴聲 (1800Hz / 400Hz 警告音) ===
 class Beeper {
   constructor() {
     this.ctx = null;
@@ -48,7 +48,7 @@ class Beeper {
       const gainNode = this.ctx.createGain();
 
       osc.type = "sine";
-      osc.frequency.setValueAtTime(1800, this.ctx.currentTime);
+      osc.frequency.setValueAtTime(1800, this.ctx.currentTime); // 正常掃碼嗶聲
 
       gainNode.gain.setValueAtTime(this.volume, this.ctx.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.08);
@@ -60,6 +60,31 @@ class Beeper {
       osc.stop(this.ctx.currentTime + 0.08);
     } catch (err) {
       console.warn("音效略過:", err);
+    }
+  }
+
+  // 重複借出錯誤警報音 (低頻長音)
+  beepError() {
+    try {
+      this.init();
+      if (!this.ctx || this.volume <= 0) return;
+
+      const osc = this.ctx.createOscillator();
+      const gainNode = this.ctx.createGain();
+
+      osc.type = "sawtooth";
+      osc.frequency.setValueAtTime(350, this.ctx.currentTime); // 警告低音
+
+      gainNode.gain.setValueAtTime(this.volume, this.ctx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + 0.3);
+
+      osc.connect(gainNode);
+      gainNode.connect(this.ctx.destination);
+
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.3);
+    } catch (err) {
+      console.warn("警告音效略過:", err);
     }
   }
 }
@@ -106,7 +131,26 @@ function initSignatureCanvas(canvas, currentPad) {
   }
 }
 
-// === 5. 核心：從 Supabase items 表查詢物品品名 ===
+// === 5. 核心查詢與防重複檢驗 ===
+
+// 查詢該物品目前是否處於「未歸還借出中」狀態
+async function checkItemAlreadyBorrowed(itemCode) {
+  if (!dbClient) return null;
+  const { data, error } = await dbClient
+    .from("borrow_records")
+    .select("borrower_name, department_class, borrow_time")
+    .eq("item_code", itemCode)
+    .eq("is_returned", false)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("檢查借用狀態失敗:", error);
+    return null;
+  }
+  return data; // 若有資料，代表目前尚未歸還
+}
+
+// 從 items 表查詢品名
 async function fetchItemNameByCode(itemCode) {
   const nameInput = document.getElementById("borrow-item-name");
   if (!nameInput || !dbClient) return;
@@ -123,25 +167,20 @@ async function fetchItemNameByCode(itemCode) {
 
     nameInput.style.color = "#0f172a";
 
-    if (error) {
-      console.warn("items 表查無資料或權限問題:", error);
+    if (error || !data) {
       nameInput.value = "";
+      nameInput.placeholder = "資料庫無此品名，請手動輸入";
       return;
     }
 
-    if (data && data.item_name) {
+    if (data.item_name) {
       nameInput.value = data.item_name;
-      // 成功帶出品名給予綠色視覺反饋
       nameInput.style.borderColor = "#10b981";
       nameInput.style.backgroundColor = "#ecfdf5";
       setTimeout(() => {
         nameInput.style.borderColor = "";
         nameInput.style.backgroundColor = "";
       }, 1200);
-    } else {
-      // items 表無此項目，清空讓使用者可手填
-      nameInput.value = "";
-      nameInput.placeholder = "資料庫無此品名，請手動輸入";
     }
   } catch (e) {
     console.error("品名查詢異常:", e);
@@ -149,7 +188,7 @@ async function fetchItemNameByCode(itemCode) {
   }
 }
 
-// === 6. 掃描模組 (借用掃描 + 自動查品名) ===
+// === 6. 掃描模組 (整合防重複檢驗) ===
 
 // 借用掃描器
 async function toggleBorrowScanner() {
@@ -175,14 +214,31 @@ async function toggleBorrowScanner() {
       { fps: 15, qrbox: (w, h) => ({ width: Math.floor(Math.min(w, h) * 0.85), height: Math.floor(Math.min(w, h) * 0.85) }) },
       async (decodedText) => {
         const input = document.getElementById("borrow-item-code");
-        // 避免同一條碼反覆觸發
+        const nameInput = document.getElementById("borrow-item-name");
+        
         if (input && input.value !== decodedText) {
+          // 核心檢查：是否已被借出且未還
+          const unreturnedInfo = await checkItemAlreadyBorrowed(decodedText);
+          if (unreturnedInfo) {
+            beeper.beepError();
+            input.value = "";
+            nameInput.value = "";
+            const d = new Date(unreturnedInfo.borrow_time).toLocaleDateString("zh-TW", {
+              month: "numeric",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit"
+            });
+            alert(`⚠️ 【無法借出】\n\n此物品 [${decodedText}] 目前仍在借用中，不可重複借出！\n\n借用人：${unreturnedInfo.borrower_name} (${unreturnedInfo.department_class || "-"})\n借出時間：${d}\n\n請先完成歸還手續。`);
+            return;
+          }
+
+          // 正常可借狀態
           beeper.beep();
           input.value = decodedText;
           input.style.borderColor = "#10b981";
           setTimeout(() => input.style.borderColor = "", 1000);
 
-          // 核心：掃到代碼立即去 items 資料表查品名
           await fetchItemNameByCode(decodedText);
         }
       },
@@ -321,7 +377,7 @@ function switchRecordsSubTab(subTab) {
   document.getElementById("subpage-returned")?.classList.toggle("is-hidden", subTab !== "returned");
 }
 
-// === 10. 模組 1：借用登記送出 ===
+// === 10. 模組 1：借用登記送出 (雙重防重複驗證) ===
 async function submitBorrowRecord() {
   if (!dbClient) return alert("未設定 Supabase 連線！");
 
@@ -344,6 +400,14 @@ async function submitBorrowRecord() {
   }
 
   if (!itemCode) return alert("請先開啟鏡頭掃描物品 QR Code 代碼！");
+
+  // 送出前二次檢查：確保無人搶先借出
+  const alreadyBorrowed = await checkItemAlreadyBorrowed(itemCode);
+  if (alreadyBorrowed) {
+    beeper.beepError();
+    return alert(`⚠️ 登記失敗！此物品 [${itemCode}] 已經被借出（借用人：${alreadyBorrowed.borrower_name}），無法重複借出！`);
+  }
+
   if (!borrowerName) return alert("請填寫借用人姓名！");
   if (!borrowPad || borrowPad.isEmpty()) return alert("借用人必須手寫簽名！");
 
@@ -372,7 +436,12 @@ async function submitBorrowRecord() {
 
   if (error) {
     console.error("借用失敗:", error);
-    alert(`登記失敗！\n錯誤原因: ${error.message}`);
+    // 攔截唯一索引約束錯誤
+    if (error.code === "23505") {
+      alert("⚠️ 此物品已被他人借出中，資料庫已自動拒絕重複借出！");
+    } else {
+      alert(`登記失敗！\n錯誤原因: ${error.message}`);
+    }
   } else {
     alert("借用手續完成！");
     document.getElementById("borrow-item-code").value = "";
