@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -52,7 +53,10 @@
         <div>
           <div class="card-header">
             <h2>1. 物品條碼掃描</h2>
-            <button id="btn-toggle-scanner-borrow" class="btn-sm btn-camera">開啟鏡頭</button>
+            <div class="camera-actions">
+              <button id="btn-switch-camera-borrow" class="btn-sm btn-outline">切換至前鏡頭</button>
+              <button id="btn-toggle-scanner-borrow" class="btn-sm btn-camera">開啟鏡頭</button>
+            </div>
           </div>
 
           <!-- 鏡頭預覽區 -->
@@ -160,7 +164,10 @@
         <div>
           <div class="card-header">
             <h2>1. 掃描欲歸還之物品</h2>
-            <button id="btn-toggle-scanner-return" class="btn-sm btn-camera">開啟鏡頭</button>
+            <div class="camera-actions">
+              <button id="btn-switch-camera-return" class="btn-sm btn-outline">切換至前鏡頭</button>
+              <button id="btn-toggle-scanner-return" class="btn-sm btn-camera">開啟鏡頭</button>
+            </div>
           </div>
 
           <div id="qr-reader-return" class="scanner-box">
