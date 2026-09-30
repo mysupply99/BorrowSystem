@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>物品與鑰匙借還登記系統</title>
   
-  <!-- iPad 全螢幕支援 -->
+  <!-- iPad 全螢幕支援與狀態列樣式 -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
@@ -23,7 +23,7 @@
 </head>
 <body>
 
-  <!-- 頂部導航列 -->
+  <!-- 頂部導航列 (包含 Safe Area 適配) -->
   <header class="app-header">
     <div class="header-left">
       <div class="status-dot"></div>
@@ -50,191 +50,204 @@
   <main class="main-container">
     
     <!-- ================= 模組 1：借用登記 ================= -->
-    <div id="page-borrow" class="page-view flex-row">
-      <!-- 左側：掃描與物品代碼 -->
-      <section class="card left-pane">
-        <div>
-          <div class="card-header">
-            <h2>1. 物品條碼掃描</h2>
-            <div class="camera-actions">
-              <button id="btn-switch-camera-borrow" class="btn-sm btn-outline">切換至前鏡頭</button>
-              <button id="btn-toggle-scanner-borrow" class="btn-sm btn-camera">開啟鏡頭</button>
+    <div id="page-borrow" class="page-view flex-col">
+      <!-- 左右兩欄主工作區 -->
+      <div class="two-columns-row">
+        <!-- 左側：掃描與物品代碼 -->
+        <section class="card column-pane">
+          <div>
+            <div class="card-header">
+              <h2>1. 物品條碼掃描</h2>
+              <div class="camera-actions">
+                <button id="btn-switch-camera-borrow" class="btn-sm btn-outline">切換至前鏡頭</button>
+                <button id="btn-toggle-scanner-borrow" class="btn-sm btn-camera">開啟鏡頭</button>
+              </div>
+            </div>
+
+            <!-- 鏡頭預覽區 -->
+            <div id="qr-reader-borrow" class="scanner-box">
+              <div class="scanner-placeholder">
+                <span class="placeholder-icon">📷</span>
+                <p>點擊上方「開啟鏡頭」掃描 QR Code</p>
+              </div>
+            </div>
+
+            <div class="form-group-stack">
+              <div class="form-field">
+                <label>物品代碼 (統一掃描，禁止手填)</label>
+                <input id="borrow-item-code" type="text" placeholder="請使用鏡頭掃描 QR Code 帶入" class="input-mono input-readonly" readonly />
+              </div>
+              
+              <div class="form-row-2">
+                <div class="form-field">
+                  <label>物品品名</label>
+                  <input id="borrow-item-name" type="text" placeholder="例: 筆電充電車 / 鑰匙" />
+                </div>
+                <div class="form-field">
+                  <label>借出數量</label>
+                  <input id="borrow-quantity" type="number" min="1" value="1" />
+                </div>
+              </div>
             </div>
           </div>
+          <div class="tip-text">物品代碼統一由 QR Code 自動掃描帶入</div>
+        </section>
 
-          <!-- 鏡頭預覽區 -->
-          <div id="qr-reader-borrow" class="scanner-box">
-            <div class="scanner-placeholder">
-              <span class="placeholder-icon">📷</span>
-              <p>點擊上方「開啟鏡頭」掃描 QR Code</p>
-            </div>
-          </div>
-
+        <!-- 右側：借用人資訊與手寫簽名 -->
+        <section class="card column-pane scroll-pane">
           <div class="form-group-stack">
-            <div class="form-field">
-              <label>物品代碼 (統一掃描，禁止手填)</label>
-              <input id="borrow-item-code" type="text" placeholder="請使用鏡頭掃描 QR Code 帶入" class="input-mono input-readonly" readonly />
+            <h2>2. 借用人身分資料</h2>
+
+            <!-- 身分切換按鈕 -->
+            <div class="role-switch">
+              <button id="role-btn-student" type="button" class="role-btn active">學生登記</button>
+              <button id="role-btn-staff" type="button" class="role-btn">教職員登記</button>
             </div>
-            
-            <div class="form-row-2">
+
+            <!-- 學生容器 -->
+            <div id="container-student" class="form-row-3">
               <div class="form-field">
-                <label>物品品名</label>
-                <input id="borrow-item-name" type="text" placeholder="例: 筆電充電車 / 鑰匙" />
+                <label>班級</label>
+                <input id="borrow-class" type="text" placeholder="例: 801" />
               </div>
               <div class="form-field">
-                <label>借出數量</label>
-                <input id="borrow-quantity" type="number" min="1" value="1" />
+                <label>座號</label>
+                <input id="borrow-seat" type="number" placeholder="例: 15" />
+              </div>
+              <div class="form-field">
+                <label>借用人姓名</label>
+                <input id="borrow-name-student" type="text" placeholder="學生全名" />
+              </div>
+            </div>
+
+            <!-- 教職員容器 -->
+            <div id="container-staff" class="form-row-2 is-hidden">
+              <div class="form-field">
+                <label>處室 / 科別</label>
+                <select id="borrow-dept">
+                  <option value="教務處">教務處</option>
+                  <option value="學務處">學務處</option>
+                  <option value="總務處">總務處</option>
+                  <option value="輔導室">輔導室</option>
+                  <option value="圖書館">圖書館</option>
+                  <option value="專科教室">專科教室</option>
+                  <option value="其他">其他</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label>教師 / 職員姓名</label>
+                <input id="borrow-name-staff" type="text" placeholder="教職員全名" />
+              </div>
+            </div>
+
+            <!-- 借用用途 -->
+            <div class="form-field">
+              <label>借用用途說明 (選填)</label>
+              <input id="borrow-purpose" type="text" placeholder="例: 課程分組教學 / 活動借用" />
+            </div>
+
+            <!-- 借用人簽名 (加高版) -->
+            <div class="form-field">
+              <div class="sign-header">
+                <label>借用人手寫簽名</label>
+                <button id="btn-clear-signature" type="button" class="btn-text-danger">清除簽名</button>
+              </div>
+              <div class="canvas-wrapper">
+                <canvas id="canvas-borrow-sign" class="signature-canvas"></canvas>
               </div>
             </div>
           </div>
-        </div>
-        <div class="tip-text">物品代碼統一由 QR Code 自動掃描帶入</div>
-      </section>
+        </section>
+      </div>
 
-      <!-- 右側：借用人資訊與手寫簽名 -->
-      <section class="card right-pane">
-        <div class="form-group-stack">
-          <h2>2. 借用人身分資料</h2>
-
-          <!-- 身分切換按鈕 -->
-          <div class="role-switch">
-            <button id="role-btn-student" type="button" class="role-btn active">學生登記</button>
-            <button id="role-btn-staff" type="button" class="role-btn">教職員登記</button>
-          </div>
-
-          <!-- 學生容器 -->
-          <div id="container-student" class="form-row-3">
-            <div class="form-field">
-              <label>班級</label>
-              <input id="borrow-class" type="text" placeholder="例: 801" />
-            </div>
-            <div class="form-field">
-              <label>座號</label>
-              <input id="borrow-seat" type="number" placeholder="例: 15" />
-            </div>
-            <div class="form-field">
-              <label>借用人姓名</label>
-              <input id="borrow-name-student" type="text" placeholder="學生全名" />
-            </div>
-          </div>
-
-          <!-- 教職員容器 -->
-          <div id="container-staff" class="form-row-2 is-hidden">
-            <div class="form-field">
-              <label>處室 / 科別</label>
-              <select id="borrow-dept">
-                <option value="教務處">教務處</option>
-                <option value="學務處">學務處</option>
-                <option value="總務處">總務處</option>
-                <option value="輔導室">輔導室</option>
-                <option value="圖書館">圖書館</option>
-                <option value="專科教室">專科教室</option>
-                <option value="其他">其他</option>
-              </select>
-            </div>
-            <div class="form-field">
-              <label>教師 / 職員姓名</label>
-              <input id="borrow-name-staff" type="text" placeholder="教職員全名" />
-            </div>
-          </div>
-
-          <!-- 借用用途 -->
-          <div class="form-field">
-            <label>借用用途說明 (選填)</label>
-            <input id="borrow-purpose" type="text" placeholder="例: 課程分組教學 / 活動借用" />
-          </div>
-
-          <!-- 借用人簽名 -->
-          <div class="form-field">
-            <div class="sign-header">
-              <label>借用人手寫簽名</label>
-              <button id="btn-clear-signature" type="button" class="btn-text-danger">清除簽名</button>
-            </div>
-            <div class="canvas-wrapper">
-              <canvas id="canvas-borrow-sign" class="signature-canvas"></canvas>
-            </div>
-          </div>
-        </div>
-
+      <!-- 跨越兩欄最下方的送出按鈕列 -->
+      <div class="bottom-action-bar">
         <button id="btn-submit-borrow" class="btn-primary">確認借出並送出登記</button>
-      </section>
+      </div>
     </div>
 
     <!-- ================= 模組 2：歸還登記 ================= -->
-    <div id="page-return" class="page-view flex-row is-hidden">
-      <!-- 左側：掃描條碼或挑選未還物品 -->
-      <section class="card left-pane">
-        <div>
-          <div class="card-header">
-            <h2>1. 掃描欲歸還之物品</h2>
-            <div class="camera-actions">
-              <button id="btn-switch-camera-return" class="btn-sm btn-outline">切換至前鏡頭</button>
-              <button id="btn-toggle-scanner-return" class="btn-sm btn-camera">開啟鏡頭</button>
-            </div>
-          </div>
-
-          <div id="qr-reader-return" class="scanner-box">
-            <div class="scanner-placeholder">
-              <span class="placeholder-icon">📷</span>
-              <p>掃描歸還物品 QR Code 可自動帶入紀錄</p>
-            </div>
-          </div>
-
-          <div class="mt-14">
+    <div id="page-return" class="page-view flex-col is-hidden">
+      <!-- 左右兩欄主工作區 -->
+      <div class="two-columns-row">
+        <!-- 左側：掃描條碼或挑選未還物品 -->
+        <section class="card column-pane">
+          <div>
             <div class="card-header">
-              <h3 class="sub-h3">或從未還物品中直接點選：</h3>
-              <button id="btn-refresh-return-pick" class="btn-sm">重新整理</button>
+              <h2>1. 掃描欲歸還之物品</h2>
+              <div class="camera-actions">
+                <button id="btn-switch-camera-return" class="btn-sm btn-outline">切換至前鏡頭</button>
+                <button id="btn-toggle-scanner-return" class="btn-sm btn-camera">開啟鏡頭</button>
+              </div>
             </div>
-            <div class="table-container mini-table">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>品名代碼</th>
-                    <th>借用人</th>
-                    <th style="text-align: right;">選擇</th>
-                  </tr>
-                </thead>
-                <tbody id="return-pick-tbody">
-                  <!-- 動態載入待歸還列表供挑選 -->
-                </tbody>
-              </table>
+
+            <div id="qr-reader-return" class="scanner-box">
+              <div class="scanner-placeholder">
+                <span class="placeholder-icon">📷</span>
+                <p>掃描歸還物品 QR Code 可自動帶入紀錄</p>
+              </div>
             </div>
-          </div>
-        </div>
-      </section>
 
-      <!-- 右側：歸還資料確認與簽名 -->
-      <section class="card right-pane">
-        <div class="form-group-stack">
-          <h2>2. 歸還手續與簽名確認</h2>
-
-          <div id="return-active-info" class="selected-borrow-box">
-            請先由左側「鏡頭掃描條碼」或「點選待還物品」
-          </div>
-
-          <div class="form-field">
-            <label>歸還人姓名 (預設為原借用人，代還可修改)</label>
-            <input id="return-borrower-name" type="text" placeholder="請填寫歸還人姓名" />
-          </div>
-
-          <div class="form-field">
-            <label>歸還物品狀況備註 (選填)</label>
-            <input id="return-notes" type="text" placeholder="例: 物品完好 / 缺少一條線材" />
-          </div>
-
-          <div class="form-field">
-            <div class="sign-header">
-              <label>歸還人手寫簽名</label>
-              <button id="btn-clear-return-signature" type="button" class="btn-text-danger">清除簽名</button>
-            </div>
-            <div class="canvas-wrapper">
-              <canvas id="canvas-return-sign" class="signature-canvas"></canvas>
+            <div class="mt-14">
+              <div class="card-header">
+                <h3 class="sub-h3">或從未還物品中直接點選：</h3>
+                <button id="btn-refresh-return-pick" class="btn-sm">重新整理</button>
+              </div>
+              <div class="table-container mini-table">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>品名代碼</th>
+                      <th>借用人</th>
+                      <th style="text-align: right;">選擇</th>
+                    </tr>
+                  </thead>
+                  <tbody id="return-pick-tbody">
+                    <!-- 動態載入待歸還列表供挑選 -->
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-        </div>
+        </section>
 
+        <!-- 右側：歸還資料確認與簽名 -->
+        <section class="card column-pane scroll-pane">
+          <div class="form-group-stack">
+            <h2>2. 歸還手續與簽名確認</h2>
+
+            <div id="return-active-info" class="selected-borrow-box">
+              請先由左側「鏡頭掃描條碼」或「點選待還物品」
+            </div>
+
+            <div class="form-field">
+              <label>歸還人姓名 (預設為原借用人，代還可修改)</label>
+              <input id="return-borrower-name" type="text" placeholder="請填寫歸還人姓名" />
+            </div>
+
+            <div class="form-field">
+              <label>歸還物品狀況備註 (選填)</label>
+              <input id="return-notes" type="text" placeholder="例: 物品完好 / 缺少一條線材" />
+            </div>
+
+            <!-- 歸還人簽名 (加高版) -->
+            <div class="form-field">
+              <div class="sign-header">
+                <label>歸還人手寫簽名</label>
+                <button id="btn-clear-return-signature" type="button" class="btn-text-danger">清除簽名</button>
+              </div>
+              <div class="canvas-wrapper">
+                <canvas id="canvas-return-sign" class="signature-canvas"></canvas>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- 跨越兩欄最下方的送出按鈕列 -->
+      <div class="bottom-action-bar">
         <button id="btn-confirm-return" class="btn-success">確認無誤，辦理歸還存檔</button>
-      </section>
+      </div>
     </div>
 
     <!-- ================= 模組 3：借還清單 (已借未還 + 已歸還清冊) ================= -->
@@ -305,7 +318,7 @@
     </div>
   </div>
 
-  <!-- 浮動警示通知 (Toast：完全不阻塞 Safari 鏡頭運算與畫面渲染) -->
+  <!-- 浮動警示通知 (Toast) -->
   <div id="toast-alert" class="toast-container is-hidden">
     <div class="toast-card">
       <span class="toast-icon">⚠️</span>
