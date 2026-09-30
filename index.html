@@ -1,18 +1,17 @@
-
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <!-- 指定 iPad 主畫面 App 專屬圖示 -->
-  <link rel="apple-touch-icon" href="icon.png" />
-  <link rel="icon" type="image/png" href="icon.png" />
-  
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>借還登記系統</title>
+  <title>物品與鑰匙借還登記系統</title>
   
   <!-- iPad 全螢幕支援 -->
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <!-- 專屬 App 圖示宣告 -->
+  <link rel="apple-touch-icon" href="icon.png" />
+  <link rel="icon" type="image/png" href="icon.png" />
 
   <!-- 自訂樣式表 -->
   <link rel="stylesheet" href="style.css" />
@@ -209,7 +208,6 @@
         <div class="form-group-stack">
           <h2>2. 歸還手續與簽名確認</h2>
 
-          <!-- 當前選定歸還的紀錄摘要 -->
           <div id="return-active-info" class="selected-borrow-box">
             請先由左側「鏡頭掃描條碼」或「點選待還物品」
           </div>
@@ -224,7 +222,6 @@
             <input id="return-notes" type="text" placeholder="例: 物品完好 / 缺少一條線材" />
           </div>
 
-          <!-- 歸還人簽名 -->
           <div class="form-field">
             <div class="sign-header">
               <label>歸還人手寫簽名</label>
@@ -242,7 +239,6 @@
 
     <!-- ================= 模組 3：借還清單 (已借未還 + 已歸還清冊) ================= -->
     <div id="page-records" class="page-view card is-hidden flex-col">
-      <!-- 次分頁切換：已借未還 VS 已歸還清冊 -->
       <div class="records-subnav-bar">
         <div class="subnav-tabs">
           <button id="subnav-unreturned" class="sub-tab-btn active">已借未還物品清單 (<span id="count-unreturned">0</span>)</button>
@@ -271,7 +267,7 @@
         </table>
       </div>
 
-      <!-- 表格 2：已歸還清冊 (預設隱藏) -->
+      <!-- 表格 2：已歸還清冊 -->
       <div id="subpage-returned" class="table-container full-table is-hidden">
         <table class="data-table">
           <thead>
@@ -306,6 +302,14 @@
       <div id="sign-view-content" class="signs-compare-grid">
         <!-- 動態帶入借用與歸還簽名圖片 -->
       </div>
+    </div>
+  </div>
+
+  <!-- 浮動警示通知 (Toast：完全不阻塞 Safari 鏡頭運算與畫面渲染) -->
+  <div id="toast-alert" class="toast-container is-hidden">
+    <div class="toast-card">
+      <span class="toast-icon">⚠️</span>
+      <div id="toast-message" class="toast-text"></div>
     </div>
   </div>
 
