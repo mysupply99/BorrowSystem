@@ -28,15 +28,19 @@ button {
   cursor: pointer;
 }
 
-/* === 頂部導航列 === */
+/* === 頂部導航列 (完美適配 iPadOS 狀態列 Safe Area) === */
 .app-header {
   background-color: #0f172a;
   color: #ffffff;
-  padding: 10px 24px;
+  /* 支援 iPadOS 瀏海與全螢幕狀態列間距 */
+  padding-top: max(14px, env(safe-area-inset-top));
+  padding-bottom: 12px;
+  padding-left: max(24px, env(safe-area-inset-left));
+  padding-right: max(24px, env(safe-area-inset-right));
   display: flex;
   justify-content: space-between;
   align-items: center;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 3px 6px rgba(0,0,0,0.12);
   position: relative;
   z-index: 20;
   flex-shrink: 0;
@@ -117,28 +121,35 @@ button {
 /* === 主容器與佈局 === */
 .main-container {
   flex: 1;
-  padding: 16px 20px;
-  max-width: 1320px;
+  /* 增加整體上方 padding，版面往下移避開擁擠感 */
+  padding: 16px 20px max(14px, env(safe-area-inset-bottom)) 20px;
+  max-width: 1360px;
   width: 100%;
   margin: 0 auto;
   overflow: hidden;
   position: relative;
   z-index: 10;
+  display: flex;
+  flex-direction: column;
 }
 
 .page-view {
   height: 100%;
   width: 100%;
-}
-
-.flex-row {
   display: flex;
-  gap: 16px;
 }
 
 .flex-col {
   display: flex;
   flex-direction: column;
+}
+
+/* 兩欄主體容器：佔滿按鈕以外的高度 */
+.two-columns-row {
+  flex: 1;
+  display: flex;
+  gap: 16px;
+  min-height: 0; /* 確保內部捲動正常 */
 }
 
 .card {
@@ -151,14 +162,14 @@ button {
   z-index: 10;
 }
 
-.left-pane, .right-pane {
+.column-pane {
   flex: 1;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
 }
 
-.right-pane {
+.scroll-pane {
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
 }
@@ -182,7 +193,6 @@ h2 {
   color: #64748b;
 }
 
-/* 相機操作按鈕群組 */
 .camera-actions {
   display: flex;
   align-items: center;
@@ -340,7 +350,7 @@ h2 {
   box-shadow: 0 1px 3px rgba(0,0,0,0.08);
 }
 
-/* === 簽名板 === */
+/* === 簽名板 (高度增加至 180px，書寫更順暢) === */
 .sign-header {
   display: flex;
   justify-content: space-between;
@@ -349,9 +359,9 @@ h2 {
 
 .canvas-wrapper {
   width: 100%;
-  height: 115px;
+  height: 180px; /* 從原本 115px 擴增為 180px */
   border: 2px dashed #cbd5e1;
-  border-radius: 10px;
+  border-radius: 12px;
   background-color: #f8fafc;
   overflow: hidden;
 }
@@ -363,17 +373,23 @@ h2 {
   touch-action: none !important;
 }
 
-/* === 按鈕樣式 === */
+/* === 兩欄最下方橫跨按鈕列 (Bottom Action Bar) === */
+.bottom-action-bar {
+  margin-top: 14px;
+  width: 100%;
+  flex-shrink: 0;
+}
+
 .btn-primary {
   width: 100%;
-  margin-top: 14px;
   background-color: #2563eb;
   color: #ffffff;
   font-weight: 700;
-  padding: 12px;
+  padding: 14px;
   border: none;
-  border-radius: 10px;
-  font-size: 1rem;
+  border-radius: 12px;
+  font-size: 1.05rem;
+  box-shadow: 0 3px 6px rgba(37,99,235,0.25);
 }
 
 .btn-primary:active {
@@ -382,14 +398,14 @@ h2 {
 
 .btn-success {
   width: 100%;
-  margin-top: 14px;
   background-color: #059669;
   color: #ffffff;
   font-weight: 700;
-  padding: 12px;
+  padding: 14px;
   border: none;
-  border-radius: 10px;
-  font-size: 1rem;
+  border-radius: 12px;
+  font-size: 1.05rem;
+  box-shadow: 0 3px 6px rgba(5,150,105,0.25);
 }
 
 .btn-success:active {
@@ -569,10 +585,10 @@ h2 {
   border: 1px dashed #cbd5e1;
 }
 
-/* === 浮動通知 Toast (防 Safari 凍結鏡頭) === */
+/* === 浮動通知 Toast === */
 .toast-container {
   position: fixed;
-  top: 70px;
+  top: max(80px, calc(env(safe-area-inset-top) + 60px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 9999;
