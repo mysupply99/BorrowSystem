@@ -113,7 +113,7 @@ let toastTimer = null;
 let selectedBorrowRecord = null;
 let cachedUnreturnedRecords = [];
 
-// === 4. 非同步浮動提示 Toast (不中斷相機串流) ===
+// === 4. 非同步浮動提示 Toast ===
 function showToast(message, duration = 3500) {
   const toast = document.getElementById("toast-alert");
   const msgEl = document.getElementById("toast-message");
@@ -212,7 +212,7 @@ async function fetchItemNameByCode(itemCode) {
 
 // 啟動借用相機
 async function startBorrowCamera() {
-  beeper.init(); // 透過使用者點擊手勢解鎖音效環境
+  beeper.init();
   const btn = document.getElementById("btn-toggle-scanner-borrow");
   const switchBtn = document.getElementById("btn-switch-camera-borrow");
 
@@ -225,13 +225,11 @@ async function startBorrowCamera() {
       { facingMode: borrowFacingMode },
       { fps: 15, qrbox: (w, h) => ({ width: Math.floor(Math.min(w, h) * 0.85), height: Math.floor(Math.min(w, h) * 0.85) }) },
       async (decodedText) => {
-        // 若處於冷卻階段直接略過，保持鏡頭串流順暢
         if (isScanCoolingDown) return;
 
         const input = document.getElementById("borrow-item-code");
         const nameInput = document.getElementById("borrow-item-name");
         
-        // 核心檢查：是否已被借出且未還
         const unreturnedInfo = await checkItemAlreadyBorrowed(decodedText);
         if (unreturnedInfo) {
           isScanCoolingDown = true;
@@ -251,8 +249,7 @@ async function startBorrowCamera() {
             minute: "2-digit"
           });
 
-          // 改用非阻塞 Toast 提示，絕不觸發 Safari 畫面掛起
-          showToast(`⚠️️ 【無法借出】物品 [${decodedText}] 仍在借用中！\n借用人：${unreturnedInfo.borrower_name} (${unreturnedInfo.department_class || "-"})\n借出時間：${d}\n請先完成歸還手續。`, 3500);
+          showToast(`⚠ 【無法借出】物品 [${decodedText}] 仍在借用中！\n借用人：${unreturnedInfo.borrower_name} (${unreturnedInfo.department_class || "-"})\n借出時間：${d}\n請先完成歸還手續。`, 3500);
 
           setTimeout(() => {
             if (input) {
@@ -261,13 +258,12 @@ async function startBorrowCamera() {
               input.style.backgroundColor = "";
             }
             if (nameInput) nameInput.value = "";
-            isScanCoolingDown = false; // 解除冷卻，鏡頭可順暢辨識下一個
+            isScanCoolingDown = false;
           }, 2500);
 
           return;
         }
 
-        // 正常可借狀態
         if (input && input.value !== decodedText) {
           beeper.beep();
           input.value = decodedText;
@@ -297,7 +293,6 @@ async function startBorrowCamera() {
   }
 }
 
-// 借用相機開關
 async function toggleBorrowScanner() {
   const btn = document.getElementById("btn-toggle-scanner-borrow");
   const qrBox = document.getElementById("qr-reader-borrow");
@@ -316,7 +311,6 @@ async function toggleBorrowScanner() {
   await startBorrowCamera();
 }
 
-// 借用相機：切換前後鏡頭
 async function switchBorrowCamera() {
   borrowFacingMode = borrowFacingMode === "environment" ? "user" : "environment";
   const switchBtn = document.getElementById("btn-switch-camera-borrow");
@@ -334,7 +328,6 @@ async function switchBorrowCamera() {
   }
 }
 
-// 啟動歸還相機
 async function startReturnCamera() {
   beeper.init();
   const btn = document.getElementById("btn-toggle-scanner-return");
@@ -377,7 +370,6 @@ async function startReturnCamera() {
   }
 }
 
-// 歸還相機開關
 async function toggleReturnScanner() {
   const btn = document.getElementById("btn-toggle-scanner-return");
   const qrBox = document.getElementById("qr-reader-return");
@@ -396,7 +388,6 @@ async function toggleReturnScanner() {
   await startReturnCamera();
 }
 
-// 歸還相機：切換前後鏡頭
 async function switchReturnCamera() {
   returnFacingMode = returnFacingMode === "environment" ? "user" : "environment";
   const switchBtn = document.getElementById("btn-switch-camera-return");
@@ -414,7 +405,6 @@ async function switchReturnCamera() {
   }
 }
 
-// 停止所有相機
 async function stopAllCameras() {
   if (isBorrowCameraOn && qrBorrow) {
     try { await qrBorrow.stop(); } catch (e) {}
@@ -490,7 +480,7 @@ function switchRecordsSubTab(subTab) {
   document.getElementById("subpage-returned")?.classList.toggle("is-hidden", subTab !== "returned");
 }
 
-// === 11. 模組 1：借用登記送出 (表單防呆) ===
+// === 11. 模組 1：借用登記送出 ===
 async function submitBorrowRecord() {
   if (!dbClient) return showToast("未設定 Supabase 連線資訊！");
 
@@ -758,12 +748,12 @@ document.addEventListener("DOMContentLoaded", () => {
     beepVol.addEventListener("input", (e) => beeper.setVolume(e.target.value));
   }
 
-  // 主分頁
+  // 主分頁切換
   document.getElementById("nav-borrow")?.addEventListener("click", () => switchMainTab("borrow"));
   document.getElementById("nav-return")?.addEventListener("click", () => switchMainTab("return"));
   document.getElementById("nav-records")?.addEventListener("click", () => switchMainTab("records"));
 
-  // 清單次分頁
+  // 清單次分頁切換
   document.getElementById("subnav-unreturned")?.addEventListener("click", () => switchRecordsSubTab("unreturned"));
   document.getElementById("subnav-returned")?.addEventListener("click", () => switchRecordsSubTab("returned"));
 
@@ -779,11 +769,11 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("btn-toggle-scanner-return")?.addEventListener("click", toggleReturnScanner);
   document.getElementById("btn-switch-camera-return")?.addEventListener("click", switchReturnCamera);
 
-  // 簽名板操作
+  // 簽名板按鈕
   document.getElementById("btn-clear-signature")?.addEventListener("click", () => borrowPad && borrowPad.clear());
   document.getElementById("btn-clear-return-signature")?.addEventListener("click", () => returnPad && returnPad.clear());
 
-  // 資料表單操作
+  // 資料表單按鈕
   document.getElementById("btn-submit-borrow")?.addEventListener("click", submitBorrowRecord);
   document.getElementById("btn-confirm-return")?.addEventListener("click", submitReturnConfirm);
   document.getElementById("btn-refresh-return-pick")?.addEventListener("click", fetchReturnPickList);
@@ -811,3 +801,4 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 });
+
