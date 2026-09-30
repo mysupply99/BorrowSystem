@@ -282,7 +282,7 @@ h2 {
   font-size: 0.95rem;
   color: #0f172a;
   outline: none;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background-color 0.2s;
 }
 
 .form-field input:focus, .form-field select:focus {
@@ -567,6 +567,41 @@ h2 {
   background: #ffffff;
   border-radius: 6px;
   border: 1px dashed #cbd5e1;
+}
+
+/* === 浮動通知 Toast (防 Safari 凍結鏡頭) === */
+.toast-container {
+  position: fixed;
+  top: 70px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  width: 90%;
+  max-width: 480px;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.toast-card {
+  background-color: #dc2626;
+  color: #ffffff;
+  padding: 14px 18px;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(220, 38, 38, 0.45);
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.toast-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+.toast-text {
+  font-size: 0.9rem;
+  line-height: 1.45;
+  white-space: pre-line;
 }
 
 .is-hidden {
